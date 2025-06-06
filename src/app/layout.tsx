@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Templify AI - Transform Product URLs into Email Templates",
+  title: "Templaito - Transform Product URLs into Email Templates",
   description:
     "Turn any product URL into beautiful, conversion-focused email templates with AI in seconds",
   keywords:

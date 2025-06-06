@@ -80,7 +80,7 @@ const promptTypes = [
   },
 ];
 
-export default function TemplifyAI() {
+export default function Templaito() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -176,7 +176,7 @@ export default function TemplifyAI() {
               <SparklesIcon className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Templify AI
+              Templaito
             </h1>
           </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
