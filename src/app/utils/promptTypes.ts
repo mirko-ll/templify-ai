@@ -1,143 +1,101 @@
 export interface PromptType {
-    name: string;
-    description: string;
-    system: string;
-    user: string;
+   name: string;
+   description: string;
+   system: string;
+   user: string;
 }
 
 export const promptTypes: PromptType[] = [
-    {
-        name: "Professional",
-        description: "Clean, professional email template with clear CTAs and minimal design",
-        system: "You are an expert email marketing designer specializing in professional, clean designs.",
-        user: `Create an HTML email for this product with a professional, clean design.
+   {
+      name: "Professional",
+      description: "Clean, professional email template with clear CTAs and minimal design",
+      system: "You are a strategic email marketing expert specializing in professional, trust-building campaigns that position brands as industry authorities and drive business growth through credible, value-driven messaging.",
+      user: `Create me an HTML email with professional colors and minimal emojis related to this product: {{product_name}}
+1. Longer bold product title with professional authority trigger (50 characters max)
+2. Short description of the product with key business benefits and trust triggers (maximum 100 characters)
+3. Three bullet points with the main professional features with a business-appropriate emoji representing the feature + a short description (2 words for each feature separately, 40 characters for the description focusing on competitive advantage)
+4. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use navy blue or professional colors related to the product)
+5. Image banner using {{image_url}} that links to the {{product_link}}
 
-Follow these exact specifications:
-1. Bold product title (max 50 chars) above the image with professional tone
-2. Concise product description highlighting value (max 80 chars)
-3. Three bullet points with:
-   - Business-appropriate emoji for each point
-   - Bold feature name (2-3 words max)
-   - Brief description (max 40 chars)
-4. Clean CTA button (width: 300px, height: 50px, font-size: 16px) with navy blue background
-5. Product image below the description, above bullet points
-6. Professional footer with unsubscribe text (8px font):
-   "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {unsubscribe}UNSUBSCRIBE{/unsubscribe} Onet Digital d.o.o., Gmajna 10, Trzin"
-
-Design requirements:
-- Remove excess padding
-- Increase font size of benefits by 2px and make bold
-- Use professional color scheme (blues, grays)
-- Responsive design with clean margins
+- Image must be under the CTA button!
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-    },
-    {
-        name: "Promotional",
-        description: "Eye-catching promotional email with emphasis on discounts and limited offers",
-        system: "You are an expert email marketing designer specializing in promotional emails that drive immediate action.",
-        user: `Create an HTML email with promotional design for this product.
-
-Follow these exact specifications:
-1. Attention-grabbing title with urgency trigger (max 50 chars) at top
-2. Short description focusing on savings/value (max 80 chars)
-3. Three bullet points with:
-   - Action-oriented emoji for each point
-   - Bold benefit name (2-3 words)
-   - Brief impact description (max 40 chars)
-4. Large red CTA button (width: 350px, height: 50px, font-size: 18px, ALL CAPS text)
-5. Product image positioned prominently below title
-6. Standard footer with unsubscribe text (8px font):
-   "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {unsubscribe}UNSUBSCRIBE{/unsubscribe} Onet Digital d.o.o., Gmajna 10, Trzin"
-
-Design requirements:
-- Bold pricing information with strikethrough for original price
-- Highlight discount percentage in contrasting color
-- Minimal padding between elements
-- Make benefit text bold and 2px larger than standard text
-- Use attention-grabbing colors
+   },
+   {
+      name: "Promotional",
+      description: "Eye-catching promotional email with emphasis on value and limited offers",
+      system: "You are a strategic email marketing expert specializing in high-converting promotional campaigns that create urgency and drive immediate action through persuasive copywriting and psychological triggers.",
+      user: `Create me an HTML email with vibrant promotional colors and action-driving emojis related to this product: {{product_name}}
+1. Longer bold product title with urgency and value trigger (50 characters max)
+2. Short description of the product with key transformation benefits and scarcity triggers (maximum 100 characters)
+3. Three bullet points with the main compelling features with an action-oriented emoji representing the feature + a short description (2 words for each feature separately, 40 characters for the description focusing on outcomes and results)  
+4. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use bright, high-contrast colors related to the product)
+5. Image banner using {{image_url}} that links to the {{product_link}}
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-    },
-    {
-        name: "Minimal",
-        description: "Clean, minimal design with focus on product image and simplicity",
-        system: "You are an expert email marketing designer specializing in minimal, elegant designs.",
-        user: `Create an HTML email with minimal, elegant design for this product.
-
-Follow these exact specifications:
-1. Simple, elegant product title (max 40 chars) with ample whitespace
-2. Very brief product description (max 60 chars)
-3. Three clean bullet points with:
-   - Minimal or no emoji
-   - Concise feature name (1-2 words)
-   - Brief explanation (max 30 chars)
-4. Subtle CTA button (width: 250px, height: 40px, font-size: 14px) with light gray or pastel background
-5. Large, high-quality product image as focal point
-6. Minimal footer with unsubscribe text (8px font):
-   "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {unsubscribe}UNSUBSCRIBE{/unsubscribe} Onet Digital d.o.o., Gmajna 10, Trzin"
-
-Design requirements:
-- Maximum whitespace
-- Minimal color palette (black, white, one accent color)
-- Elegant typography with consistent spacing
-- No unnecessary elements or decorations
-- Benefits text slightly larger (+2px) and bold
+   },
+   {
+      name: "Minimal",
+      description: "Clean, minimal design with focus on product image and simplicity",
+      system: "You are a strategic email marketing expert specializing in minimalist, premium designs that communicate product quality and brand sophistication through elegant simplicity and strategic whitespace.",
+      user: `Create me an HTML email with clean minimal colors and subtle emojis related to this product: {{product_name}}
+1. Longer bold product title with sophisticated quality trigger (50 characters max)
+2. Short description of the product with key premium features and elegance triggers (maximum 100 characters)
+3. Three bullet points with the main refined features with a subtle emoji representing the feature + a short description (2 words for each feature separately, 40 characters for the description focusing on quality and simplicity)
+4. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use muted, sophisticated colors related to the product)
+5. Image banner using {{image_url}} that links to the {{product_link}}
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-    },
-    {
-        name: "Bold & Colorful",
-        description: "Vibrant, eye-catching email with bold colors and strong visuals",
-        system: "You are an expert email marketing designer specializing in vibrant, attention-grabbing designs.",
-        user: `Create an HTML email with bold, colorful design for this product.
+   },
+   {
+      name: "Elegant & Sophisticated",
+      description: "Refined, premium design with sophisticated aesthetic for high-end products",
+      system: "You are a strategic email marketing expert specializing in luxury brand communications that convey exclusivity, heritage, and premium positioning through sophisticated design and carefully crafted messaging.",
+      user: `Create me an HTML email with luxury colors and premium emojis related to this product: {{product_name}}
+1. Longer bold product title with exclusivity and heritage trigger (50 characters max)
+2. Short description of the product with key luxury features and prestige triggers (maximum 100 characters)
+3. Three bullet points with the main sophisticated features with an elegant emoji representing the feature + a short description (2 words for each feature separately, 40 characters for the description focusing on craftsmanship and exclusivity)
+4. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use gold, black, or luxury colors related to the product)
+5. Image banner using {{image_url}} that links to the {{product_link}}
 
-Follow these exact specifications:
-1. Attention-grabbing title with color highlight (max 50 chars)
-2. Energetic product description (max 80 chars)
-3. Three bold bullet points with:
-   - Colorful emoji for each point
-   - Bold, catchy feature name (2-3 words)
-   - Impactful description (max 40 chars)
-4. Large, vibrant CTA button (width: 400px, height: 60px, font-size: 20px, bold text)
-5. Product image with colorful border or background effect
-6. Standard footer with unsubscribe text (8px font):
-   "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {unsubscribe}UNSUBSCRIBE{/unsubscribe} Onet Digital d.o.o., Gmajna 10, Trzin"
-
-Design requirements:
-- Vibrant color scheme with complementary colors
-- Bold typography with size variation
-- Reduced padding between elements
-- Make benefit text bold and 2px larger
-- Use background color blocks to create visual interest
+- Image must be under the CTA button!
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-    },
-    {
-        name: "Modern & Sleek",
-        description: "Contemporary design with clean lines and modern aesthetic",
-        system: "You are an expert email marketing designer specializing in modern, sleek designs with contemporary aesthetics.",
-        user: `Create an HTML email with modern, sleek design for this product.
-
-Follow these exact specifications:
-1. Contemporary product title with modern font (max 50 chars)
-2. Concise, benefit-focused description (max 70 chars)
-3. Three modern bullet points with:
-   - Minimal icon or subtle emoji for each
-   - Short feature name (1-2 words)
-   - Clear benefit statement (max 40 chars)
-4. Sleek CTA button (width: 300px, height: 45px, font-size: 16px) with gradient background
-5. Clean product image display with subtle shadow effect
-6. Modern footer with unsubscribe text (8px font):
-   "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {unsubscribe}UNSUBSCRIBE{/unsubscribe} Onet Digital d.o.o., Gmajna 10, Trzin"
-
-Design requirements:
-- Modern color palette (gradients acceptable)
-- Clean spacing with intentional whitespace
-- Sans-serif typography throughout
-- Benefits text bold and 2px larger
-- Minimal but effective design elements
+   },
+   {
+      name: "Modern & Sleek",
+      description: "Contemporary design with clean lines and modern aesthetic",
+      system: "You are a strategic email marketing expert specializing in cutting-edge, tech-forward designs that appeal to innovation-focused audiences and position brands as industry leaders in the digital age.",
+      user: `Create me an HTML email with modern tech colors and innovative emojis related to this product: {{product_name}}
+1. Longer bold product title with innovation and future-forward trigger (50 characters max)
+2. Short description of the product with key cutting-edge features and progress triggers (maximum 100 characters)
+3. Three bullet points with the main advanced features with a tech-forward emoji representing the feature + a short description (2 words for each feature separately, 40 characters for the description focusing on innovation and early adoption benefits)
+4. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use modern gradients or tech colors related to the product)
+5. Image banner using {{image_url}} that links to the {{product_link}}
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-    }
-]; 
+   },
+   {
+      name: "Text-Only",
+      description: "Clean, text-focused design without images for faster loading and better accessibility",
+      system: "You are a strategic email marketing expert specializing in warm, friendly, and persuasive text-only campaigns that create personal connections and drive engagement through compelling copywriting and seasonal awareness.",
+      user: `Write a marketing email that is warm, friendly, and persuasive, aimed at promoting a {{product_name}}. Based on the product's characteristics, you must infer which season it is best suited for, but do not mention the season explicitly. Follow these numbered instructions and respect the character limits for each section:
+
+1. Introduction (max. 200 characters): Encourage the reader to get ready for the time of year that’s coming. Keep the tone upbeat and seasonal, and include emojis that reflect the appropriate atmosphere.
+
+2. Product Description (max. 250 characters): Describe the product as stylish, functional, and practical. Highlight its key benefits based on the conditions you associate with the season you've inferred.
+
+3. Call to Action (CTA) (max. 150 characters)
+
+Use this line: “🛍️ Get yours now!” or something similar
+The CTA must be plain text with an embedded link — no buttons or graphic elements
+Text must be in bigger size than all other text
+Make sure the {{product_link}} is integrated naturally into the sentence
+
+4. Closing (max. 100 characters): End with a warm line like “Take care!” and use emojis that match the inferred season.
+
+5. Do not include images in the email.
+
+Format response as a JSON object with 'subject' and 'html' properties.`
+   }
+];
