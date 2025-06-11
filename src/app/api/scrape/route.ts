@@ -143,7 +143,6 @@ async function generateEmailTemplates(productInfo: ProductInfo, productUrl: stri
                      5. Use inline CSS for all styling (no external CSS or style tags)
                      6. Set a max-width of 600px for the main content
                      7. Use web-safe fonts
-                     8. Make CTAs stand out with contrasting colors
                      9. Ensure all images have proper alt text
                      10. Use padding instead of margins where possible
                      11. Links should always open in a new tab
@@ -189,7 +188,7 @@ async function generateEmailTemplates(productInfo: ProductInfo, productUrl: stri
                          </table>
                          <![endif]-->
                      </body>
-                     </html>`,
+                     </html>`
                 },
                 {
                     role: "user",

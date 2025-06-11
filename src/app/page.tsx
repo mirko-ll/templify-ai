@@ -43,6 +43,16 @@ const promptTypes = [
     bgColor: "bg-red-50",
     textColor: "text-red-700",
   },
+
+  {
+    name: "Landing Page",
+    description:
+      "High-converting landing page style with urgency triggers and structured persuasion elements",
+    icon: "📈",
+    color: "from-orange-500 to-red-600",
+    bgColor: "bg-orange-50",
+    textColor: "text-orange-700",
+  },
   {
     name: "Minimal",
     description:

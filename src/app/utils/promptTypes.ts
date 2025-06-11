@@ -35,6 +35,39 @@ Format response as a JSON object with 'subject' and 'html' properties.`
 Format response as a JSON object with 'subject' and 'html' properties.`
    },
    {
+      name: "Landing Page",
+      description: "High-converting landing page style with urgency triggers and structured persuasion elements",
+      system: "You are an expert landing page copywriter and designer specializing in high-converting, visually clear landing page content that drives immediate action through strategic urgency and persuasion techniques.",
+      user: `Generate a high-converting, visually clear landing page content for this product: {{product_name}}
+
+Follow this exact structure in your response:
+
+:one: **Top Header**
+   - Include a *limited time offer trigger* and a *time urgency trigger* (mention time left or countdown)
+
+:two: **Body**
+   - Product Title + short offer details text
+   - Product Image using {{image_url}} that links to {{product_link}}, followed by Button CTA #1
+   - Delivery options and payment methods, followed by Button CTA #2
+
+:three: **Persuasion Section:**
+   - Section header: "Why Choose {{product_name}}?"
+   - 5 bullet points highlighting the BEST product features with compelling benefits
+
+:four: **Footer CTA:**
+   - Button CTA #3 with {{product_link}}
+
+**Styling & Structure Guidelines:**
+- Use a color scheme that matches the product
+- CTA buttons should use high-converting, matching colors
+- DO NOT add more than 3 CTA buttons
+- Maintain a clear and easy-to-read structure
+- Copy should be concise, persuasive, and conversion-focused
+- All CTA buttons must link to {{product_link}}
+
+Format response as a JSON object with 'subject' and 'html' properties.`
+   },
+   {
       name: "Minimal",
       description: "Clean, minimal design with focus on product image and simplicity",
       system: "You are a strategic email marketing expert specializing in minimalist, premium designs that communicate product quality and brand sophistication through elegant simplicity and strategic whitespace.",
@@ -97,5 +130,5 @@ Make sure the {{product_link}} is integrated naturally into the sentence
 5. Do not include images in the email.
 
 Format response as a JSON object with 'subject' and 'html' properties.`
-   }
+   },
 ];
