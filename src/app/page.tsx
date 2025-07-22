@@ -73,6 +73,12 @@ const templateUIConfig = [
     textColor: "text-indigo-700",
   },
   {
+    icon: "📰",
+    color: "from-cyan-500 to-blue-600",
+    bgColor: "bg-cyan-50",
+    textColor: "text-cyan-700",
+  },
+  {
     icon: "🛍️",
     color: "from-purple-500 to-pink-600",
     bgColor: "bg-purple-50",
@@ -236,7 +242,7 @@ export default function Templaito() {
           {/* Stats */}
           <div className="flex justify-center gap-8 mt-8">
             <div className="text-center">
-              <div className="text-2xl font-bold text-indigo-600">7</div>
+              <div className="text-2xl font-bold text-indigo-600">8</div>
               <div className="text-sm text-gray-500">Template Styles</div>
             </div>
             <div className="text-center">
@@ -349,7 +355,7 @@ export default function Templaito() {
                     Template Selection
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    Choose from 7 professionally designed email template styles
+                    Choose from 8 professionally designed email template styles
                     for different campaigns.
                   </p>
                 </div>

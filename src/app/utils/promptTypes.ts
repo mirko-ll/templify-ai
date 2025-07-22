@@ -161,6 +161,59 @@ Make sure the {{product_link}} is integrated naturally into the sentence
 `,
   },
   {
+    name: "Blog",
+    description:
+      "Story blog template for info pages, services, and educational content",
+    system:
+      "You are a professional content creator specialized for email marketing. Create engaging newsletter templates for blog posts and informational content with clear structure, compelling headlines, and optimized readability.",
+    user: `Create an HTML email newsletter for this blog post or page: {{product_name}}
+
+**Structure Requirements:**
+
+**Top Header:**
+- Background matching the product/website colors
+- Post title with high contrast text colors
+- Professional, clean design
+
+**Body Content:**
+1. **Main Title:** Start with the main benefit of the product/service, make it bold and highlighted
+2. **Featured Image:** Insert main image from website, center-aligned and clickable (links to {{product_link}})
+3. **Body Text:** Optimize content to maximum 300 words
+4. **Additional Image:** If multiple images exist on website, add one more image in the middle of text
+5. **Benefits Highlighting:** Bold all benefit words for better visibility
+6. **Conclusion:** Personal conclusion at the end of text
+7. **CTA Button:** Clear call-to-action button
+
+**Design Requirements:**
+- Professional newsletter layout
+- Mobile-responsive design
+- High contrast for readability
+- Clean typography
+- Proper image optimization
+
+**Content Guidelines:**
+- Focus on educational and informational value
+- Highlight key benefits and features
+- Make content engaging and personal
+- Include clear call-to-action
+- Optimize for email client compatibility
+
+**Technical:**
+- Single HTML file with inline CSS
+- Table-based layout for email compatibility
+- Web-safe fonts (Arial, Helvetica, sans-serif)
+- Max-width 600px for main content
+- All images properly optimized with alt text
+- CTA button links to {{product_link}}
+
+**Product Details:**
+- Title: {{product_name}}
+- Description: {{product_description}}
+- Image: {{image_url}}
+- Link: {{product_link}}
+`,
+  },
+  {
     name: "Multi-Product Landing",
     description:
       "E-commerce category page with multiple products, and conversion optimization",
