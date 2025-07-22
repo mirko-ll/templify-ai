@@ -74,6 +74,11 @@ async function processSingleUrl(
   url: string,
   templateType: TemplateType
 ): Promise<ProductInfo> {
+  // Validate template type
+  if (!templateType?.name || !templateType?.description) {
+    throw new Error("Invalid template type provided");
+  }
+
   // Fetch the HTML content to extract information with Cheerio
   const { data } = await axios.get(url);
   const $ = cheerio.load(data);
@@ -82,34 +87,21 @@ async function processSingleUrl(
   const bodyHtml = $("body").html() || "";
   const $body = cheerio.load(bodyHtml);
 
-  // Extract images from body (keep this with Cheerio as requested)
-  const images: string[] = [];
-  $body("img").each((_, element) => {
-    const src = $body(element).attr("src");
-    if (src && !src.includes("logo") && !src.includes("icon")) {
-      // Convert relative URLs to absolute
-      const imageUrl = src.startsWith("http") ? src : new URL(src, url).href;
-      images.push(imageUrl);
-    }
-  });
-
   // Get full HTML content for AI processing
   const fullContent = $body.html() || "";
 
-  // Run both OpenAI calls in parallel for better performance
-  const [extractionResponse, bestImageResponse] = await Promise.all([
-    // Extract product information using GPT-4o-mini for JSON support
-    openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert in e-commerce product information extraction. Analyze the provided webpage content and extract product information. Be precise and only extract actual product information, not navigation or footer content. Pay special attention to finding the correct prices - look for original prices, sale prices, and discounts.",
-        },
-        {
-          role: "user",
-          content: `Analyze this webpage content and extract the following information. Pay special attention to prices and look for both original and discounted prices:
+  // Extract all information including best image in one OpenAI call
+  const extractionResponse = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert in e-commerce product information extraction. Analyze the provided webpage content and extract product information including the best product image. Be precise and only extract actual product information, not navigation or footer content. Pay special attention to finding the correct prices and the best product image.",
+      },
+      {
+        role: "user",
+        content: `Analyze this webpage content and extract the following information. Pay special attention to prices and look for both original and discounted prices. Also find the best product image URL.
 
 Content: "${fullContent}"
 
@@ -120,7 +112,8 @@ Please return a JSON object with:
     "description": "Product description (max 200 characters)",
     "regularPrice": "Regular/original price (if found)",
     "salePrice": "Sale/discounted price (if found)",
-    "discount": "Discount percentage or amount (if found)"
+    "discount": "Discount percentage or amount (if found)",
+    "bestImageUrl": "URL of the best product image (prefer OG images, then gallery images, avoid logos/icons)"
 }
 
 Instructions:
@@ -131,53 +124,29 @@ Instructions:
   * Original/regular price (often crossed out or labeled as 'regular price')
   * Sale/current price (usually more prominent)
   * Any discount percentage or amount
+- For bestImageUrl: look for:
+  * First priority: Open Graph images (og:image meta tags)
+  * Second priority: Product gallery images (main product photos)
+  * Avoid: logos, icons, navigation images
+  * Return full URL (convert relative URLs to absolute)
 - If any information is not found, return empty string for that field
 - Be precise and extract only actual product information`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    }),
-
-    // Find best image in parallel (only if images exist)
-    images.length > 0
-      ? openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an expert in e-commerce and product photography. Your task is to select the best product image for an email advertisement.",
-            },
-            {
-              role: "user",
-              content: `From these image URLs, select the index of the best one for an email advertisement. The images are: ${JSON.stringify(
-                images
-              )}. Respond with just the index number.`,
-            },
-          ],
-        })
-      : Promise.resolve(null),
-  ]);
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
 
   const extractedData = JSON.parse(
     extractionResponse.choices[0].message.content || "{}"
   );
 
-  // Process best image result
-  let bestImageUrl = "";
-  if (images.length > 0 && bestImageResponse) {
-    const indexString = bestImageResponse.choices[0].message.content?.trim();
-    const index = parseInt(indexString || "0");
-    bestImageUrl = images[index < images.length ? index : 0] || images[0];
-  }
-
   // Create product info object with extracted data
   const productInfo: ProductInfo = {
     title: extractedData.title || "Product Title",
     description: extractedData.description || "Product Description",
-    images: images,
+    images: [], // No longer needed since we get bestImageUrl directly
     language: extractedData.language || "en",
-    bestImageUrl: bestImageUrl,
+    bestImageUrl: extractedData.bestImageUrl || "",
     regularPrice: extractedData.regularPrice || "",
     salePrice: extractedData.salePrice || "",
     discount: extractedData.discount || "",
@@ -188,8 +157,13 @@ Instructions:
 
 async function processMultipleUrls(
   urls: string[],
-  templateType: any
+  templateType: TemplateType
 ): Promise<MultiProductInfo> {
+  // Validate template type
+  if (!templateType?.name || !templateType?.description) {
+    throw new Error("Invalid template type provided");
+  }
+
   // Process all URLs in parallel
   const productPromises = urls.map((url) =>
     processSingleUrl(url, templateType)
@@ -250,7 +224,8 @@ async function generateEmailTemplate(
             .replace(/\{\{image_url\}\}/g, singleProductInfo.bestImageUrl)
             .replace(/\{\{regular_price\}\}/g, singleProductInfo.regularPrice)
             .replace(/\{\{sale_price\}\}/g, singleProductInfo.salePrice)
-            .replace(/\{\{discount\}\}/g, singleProductInfo.discount)}
+            .replace(/\{\{discount\}\}/g, singleProductInfo.discount)
+            .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
                     
                     Product details:
                     Product Name: ${singleProductInfo.title}
@@ -296,7 +271,7 @@ CRITICAL INSTRUCTION: You must return ONLY pure HTML code. Do NOT wrap it in JSO
 Your response should start with: <!DOCTYPE html>
 Your response should end with: </html>
 
-MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 11):
+MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
                  1. Include full HTML document structure (DOCTYPE, html, head, body)
                  2. Add necessary meta tags in head for email client compatibility
                  3. Use a table-based layout for maximum email client compatibility
@@ -308,6 +283,7 @@ MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 11):
                  9. Ensure all images have proper alt text
                  10. Use padding instead of margins where possible
                  11. Links should always open in a new tab
+                 12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
 
 TEMPLATE-SPECIFIC REQUIREMENTS:
 Template Type: ${templateType.name} - ${templateType.description}
@@ -336,7 +312,9 @@ Product Details:
 - Discount: ${singleProductInfo.discount}
 - Link: ${urls[0]}
 
-REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 11 email requirements above AND the specific template design instructions.`,
+CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute or any other HTML link format.
+
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above AND the specific template design instructions.`,
         },
       ],
     });

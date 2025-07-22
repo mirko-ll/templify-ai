@@ -40,7 +40,8 @@ export async function generateMultiProductTemplate(
             .replace(/\{\{product_names\}\}/g, productNames)
             .replace(/\{\{product_links\}\}/g, productLinks)
             .replace(/\{\{product_images\}\}/g, productImages)
-            .replace(/\{\{product_prices\}\}/g, productPrices)}
+            .replace(/\{\{product_prices\}\}/g, productPrices)
+            .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
                     
                     Products details:
                     ${multiProductInfo.products
@@ -93,7 +94,7 @@ CRITICAL INSTRUCTION: You must return ONLY pure HTML code. Do NOT wrap it in JSO
 Your response should start with: <!DOCTYPE html>
 Your response should end with: </html>
 
-MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 11):
+MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
                  1. Include full HTML document structure (DOCTYPE, html, head, body)
                  2. Add necessary meta tags in head for email client compatibility
                  3. Use a table-based layout for maximum email client compatibility
@@ -105,6 +106,7 @@ MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 11):
                  9. Ensure all images have proper alt text
                  10. Use padding instead of margins where possible
                  11. Links should always open in a new tab
+                 12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
 
 TEMPLATE-SPECIFIC REQUIREMENTS:
 Template Type: ${templateType.name} - ${templateType.description}
@@ -115,7 +117,6 @@ ${templateType.user}
 Template Requirements:
 - Multi-product landing page for ${multiProductInfo.products.length} products
 - Template style: ${templateType.name}
-- Include animated 5-minute countdown timer with inline JavaScript
 - Each product should have: image, title, description, price, CTA button
 - Mobile responsive design using inline CSS media queries
 
@@ -141,7 +142,9 @@ Product ${index + 1}:
   )
   .join("")}
 
-REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 11 email requirements above AND the specific template design instructions.`,
+CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute or any other HTML link format.
+
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above AND the specific template design instructions.`,
         },
       ],
     });

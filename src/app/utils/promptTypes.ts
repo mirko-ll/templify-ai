@@ -38,7 +38,7 @@ export const promptTypes: TemplateType[] = [
     description:
       "High-converting landing page style with urgency triggers and structured persuasion elements",
     system:
-      "You are a professional HTML/CSS developer and landing page specialist. Create fully mobile-responsive landing pages with modern aesthetics, animated countdown timers, and high-converting elements that drive immediate action.",
+      "You are a professional HTML/CSS developer and email specialist. Create fully mobile-responsive email templates with modern aesthetics and high-converting elements that work across all email clients including Squalomail, Gmail, Outlook, and Apple Mail.",
     user: `Create a fully mobile-responsive landing page in a single HTML file for this product: {{product_name}}
 
 **Design Requirements:**
@@ -49,12 +49,12 @@ export const promptTypes: TemplateType[] = [
 
 **Structure Requirements:**
 
-:one: **Top Header with Animated Countdown:**
-- Animated countdown timer starting from 5 minutes
+:one: **Top Header with Urgency:**
 - Background matching the product color palette
 - Product price (regular: {{regular_price}}, sale: {{sale_price}})
 - Discount information: {{discount}}
 - Limited time offer trigger
+- Use table-based layout for email compatibility
 
 :two: **Main Content:**
 - Selling title of the product + call to action text
@@ -71,12 +71,15 @@ export const promptTypes: TemplateType[] = [
 - Secondary CTA button before footer
 - Professional footer with essential information
 
+
 **Technical Requirements:**
 - Single HTML file with inline CSS
-- Mobile-responsive design
-- Animated countdown timer (JavaScript)
-- All images properly optimized
+- Mobile-responsive design using media queries
+- Table-based layout for maximum email client compatibility
+- All images properly optimized with alt text
 - CTA buttons link to {{product_link}}
+- Use web-safe fonts (Arial, Helvetica, sans-serif)
+- Max-width 600px for main content
 
 **Pricing Information:**
 - Regular Price: {{regular_price}}
@@ -160,9 +163,9 @@ Make sure the {{product_link}} is integrated naturally into the sentence
   {
     name: "Multi-Product Landing",
     description:
-      "E-commerce category page with multiple products, animated countdown, and conversion optimization",
+      "E-commerce category page with multiple products, and conversion optimization",
     system:
-      "You are a professional HTML/CSS developer and e-commerce specialist. Create fully mobile-responsive multi-product landing pages with modern aesthetics, animated countdown timers, and high-converting elements optimized for multiple product showcases.",
+      "You are a professional HTML/CSS developer and email specialist. Create fully mobile-responsive multi-product email templates with modern aesthetics and high-converting elements that work across all email clients including Squalomail, Gmail, Outlook, and Apple Mail.",
     user: `Create a fully mobile-responsive multi-product landing page in a single HTML file for these products: {{product_names}}
 
 **Design Requirements:**
@@ -172,19 +175,20 @@ Make sure the {{product_link}} is integrated naturally into the sentence
 - Bold key benefit words in descriptions
 
 **Structure:**
-1. **Animated Header:** 5-minute countdown timer with product color palette background
+1. **Header:** Product color palette background with urgency messaging
 2. **Products Section:** Each product with cover image, selling title, call-to-action text
 3. **Pricing:** Real regular/sale prices with CTA buttons
 4. **Benefits:** Shipping and benefit badges under each CTA button
 
 **Technical:**
-- Single HTML file with inline CSS/JavaScript
-- Mobile-responsive design
-- Animated countdown timer
+- Single HTML file with inline CSS (no JavaScript)
+- Mobile-responsive design using media queries
+- Table-based layout for maximum email client compatibility
 - Product links: {{product_links}}
 - Images: {{product_images}}
 - Prices: {{product_prices}}
-
+- Use web-safe fonts (Arial, Helvetica, sans-serif)
+- Max-width 600px for main content
 `,
   },
 ];
