@@ -15,7 +15,7 @@ export async function generateMultiProductTemplate(
       .join(", ");
     const productLinks = urls.join(", ");
     const productImages = multiProductInfo.products
-      .map((p) => p.bestImageUrl)
+      .map((p) => p.bestImageUrl) // Use best image for multi-product
       .join(", ");
     const productPrices = multiProductInfo.products
       .map(
@@ -51,7 +51,8 @@ export async function generateMultiProductTemplate(
                     Name: ${product.title}
                     Description: ${product.description}
                     URL: ${urls[index] || urls[0]}
-                    Image: ${product.bestImageUrl}
+                    Best Image: ${product.bestImageUrl}
+                    All Images: ${product.images.join(", ")}
                     Regular Price: ${product.regularPrice}
                     Sale Price: ${product.salePrice}
                     Discount: ${product.discount}
@@ -133,7 +134,8 @@ ${multiProductInfo.products
 Product ${index + 1}:
 - Name: ${product.title}
 - Description: ${product.description}
-- Image: ${product.bestImageUrl}
+- Best Image: ${product.bestImageUrl}
+- All Images: ${product.images.join(", ")}
 - Regular Price: ${product.regularPrice}
 - Sale Price: ${product.salePrice}
 - Discount: ${product.discount}

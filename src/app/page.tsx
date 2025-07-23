@@ -28,6 +28,16 @@ interface ProductInfo {
   discount: string;
 }
 
+interface MultiProductInfo {
+  products: ProductInfo[];
+  language: string;
+}
+
+interface Template {
+  subject: string;
+  html: string;
+}
+
 // Template type icons and colors for UI display
 const templateUIConfig = [
   {
@@ -95,6 +105,9 @@ export default function Templaito() {
   const [selectedTemplateType, setSelectedTemplateType] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [step, setStep] = useState<"input" | "template-selection" | "processing" | "results">("input");
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [selectedProductIndex, setSelectedProductIndex] = useState<number>(0);
+  const [multiProductImageSelections, setMultiProductImageSelections] = useState<{ [key: number]: number }>({});
   const previewRef = useRef<HTMLIFrameElement>(null);
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
@@ -135,6 +148,9 @@ export default function Templaito() {
     setError("");
     setTemplate(null);
     setProductInfo(null);
+    setSelectedImageIndex(0); // Reset selected image
+    setSelectedProductIndex(0); // Reset selected product
+    setMultiProductImageSelections({}); // Reset multi-product selections
     setStep("processing");
 
     try {
@@ -170,8 +186,33 @@ export default function Templaito() {
   };
 
   const copyHtml = () => {
-    if (template) {
-      navigator.clipboard.writeText(template.html);
+    if (template && productInfo) {
+      let updatedHtml = template.html;
+      
+      if (isMultiProduct && "products" in productInfo) {
+        // For multi-product, replace each product's best image with selected image
+        const multiProductInfo = productInfo as MultiProductInfo;
+        multiProductInfo.products.forEach((product, productIndex) => {
+          const selectedImageIndex = multiProductImageSelections[productIndex] || 0;
+          const selectedImageUrl = product.images[selectedImageIndex] || product.bestImageUrl;
+          
+          if (selectedImageUrl !== product.bestImageUrl) {
+            updatedHtml = updatedHtml.replace(
+              new RegExp(product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+              selectedImageUrl
+            );
+          }
+        });
+      } else {
+        // For single product, replace the best image URL with the selected image URL
+        const selectedImageUrl = productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
+        updatedHtml = template.html.replace(
+          new RegExp(productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+          selectedImageUrl
+        );
+      }
+      
+      navigator.clipboard.writeText(updatedHtml);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -183,6 +224,9 @@ export default function Templaito() {
     setTemplate(null);
     setProductInfo(null);
     setSelectedTemplateType(null);
+    setSelectedImageIndex(0);
+    setSelectedProductIndex(0);
+    setMultiProductImageSelections({});
     setError("");
   };
 
@@ -190,6 +234,16 @@ export default function Templaito() {
     setStep("template-selection");
     setTemplate(null);
     setSelectedTemplateType(null);
+    setSelectedImageIndex(0);
+    setSelectedProductIndex(0);
+    setMultiProductImageSelections({});
+  };
+
+  const handleMultiProductImageSelection = (productIndex: number, imageIndex: number) => {
+    setMultiProductImageSelections(prev => ({
+      ...prev,
+      [productIndex]: imageIndex
+    }));
   };
 
   // Determine which templates to show
@@ -204,15 +258,40 @@ export default function Templaito() {
     templateUIConfig.slice(0, -1); // All except Multi-Product Landing UI
 
   useEffect(() => {
-    if (previewRef.current && template) {
+    if (previewRef.current && template && productInfo) {
       const doc = previewRef.current.contentDocument;
       if (doc) {
+        let updatedHtml = template.html;
+        
+        if (isMultiProduct && "products" in productInfo) {
+          // For multi-product, replace each product's best image with selected image
+          const multiProductInfo = productInfo as MultiProductInfo;
+          multiProductInfo.products.forEach((product, productIndex) => {
+            const selectedImageIndex = multiProductImageSelections[productIndex] || 0;
+            const selectedImageUrl = product.images[selectedImageIndex] || product.bestImageUrl;
+            
+            if (selectedImageUrl !== product.bestImageUrl) {
+              updatedHtml = updatedHtml.replace(
+                new RegExp(product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                selectedImageUrl
+              );
+            }
+          });
+        } else {
+          // For single product, replace the best image URL with the selected image URL
+          const selectedImageUrl = productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
+          updatedHtml = template.html.replace(
+            new RegExp(productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            selectedImageUrl
+          );
+        }
+        
         doc.open();
-        doc.write(template.html);
+        doc.write(updatedHtml);
         doc.close();
       }
     }
-  }, [template]);
+  }, [template, productInfo, selectedImageIndex, isMultiProduct, multiProductImageSelections]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -444,7 +523,7 @@ export default function Templaito() {
           )}
 
           {step === "processing" && (
-            <div className="flex flex-col items-center justify-center py-20">
+            <div className="flex flex-col items-center justify-center py-32">
               <div className="relative">
                 <div className="w-32 h-32 border-8 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -478,7 +557,7 @@ export default function Templaito() {
           )}
 
           {step === "results" && template && (
-            <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
+            <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 overflow-hidden mb-8">
               <div className="p-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
                 <div className="flex items-center justify-between">
                   <div>
@@ -509,7 +588,7 @@ export default function Templaito() {
                 </div>
               </div>
 
-              <div className="flex flex-col h-[70vh]">
+              <div className="flex flex-col h-[75vh]">
                 {/* Template Header */}
                 <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -557,6 +636,120 @@ export default function Templaito() {
                     )}
                   </button>
                 </div>
+
+                {/* Image Selector */}
+                {productInfo && !isMultiProduct && productInfo.images && productInfo.images.length > 1 && (
+                  <div className="p-4 bg-gray-50 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-800">Choose Product Image</h4>
+                      <span className="text-sm text-gray-500">
+                        {selectedImageIndex + 1} of {productInfo.images.length}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {productInfo.images.map((image, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setSelectedImageIndex(index)}
+                          className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                            selectedImageIndex === index
+                              ? 'border-blue-500 ring-2 ring-blue-200'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <img
+                            src={image}
+                            alt={`Product image ${index + 1}`}
+                            className="w-full h-full object-cover rounded-md"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-Product Image Selector */}
+                {productInfo && isMultiProduct && "products" in productInfo && (
+                  <div className="p-4 bg-gray-50 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-800">Choose Product Images</h4>
+                      <span className="text-sm text-gray-500">
+                        {(productInfo as MultiProductInfo).products.length} Products
+                      </span>
+                    </div>
+                    
+                    {/* Product Tabs */}
+                    <div className="flex gap-2 mb-4 overflow-x-auto">
+                      {(productInfo as MultiProductInfo).products.map((product: ProductInfo, productIndex: number) => (
+                        <button
+                          key={productIndex}
+                          onClick={() => setSelectedProductIndex(productIndex)}
+                          className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                            selectedProductIndex === productIndex
+                              ? 'bg-blue-500 text-white shadow-md'
+                              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          Product {productIndex + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Selected Product Image Selection */}
+                    {(() => {
+                      const multiProductInfo = productInfo as MultiProductInfo;
+                      const currentProduct = multiProductInfo.products[selectedProductIndex];
+                      const currentSelectedImageIndex = multiProductImageSelections[selectedProductIndex] || 0;
+                      
+                      return (
+                        <div className="bg-white rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="font-medium text-gray-800">
+                              {currentProduct.title}
+                            </h5>
+                            <span className="text-sm text-gray-500">
+                              {currentSelectedImageIndex + 1} of {currentProduct.images.length}
+                            </span>
+                          </div>
+                          
+                          {currentProduct.images && currentProduct.images.length > 1 && (
+                            <div className="flex gap-2 overflow-x-auto pb-2">
+                              {currentProduct.images.map((image: string, imageIndex: number) => (
+                                <button
+                                  key={imageIndex}
+                                  onClick={() => handleMultiProductImageSelection(selectedProductIndex, imageIndex)}
+                                  className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                                    currentSelectedImageIndex === imageIndex
+                                      ? 'border-blue-500 ring-2 ring-blue-200'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <img
+                                    src={image}
+                                    alt={`Product ${selectedProductIndex + 1} image ${imageIndex + 1}`}
+                                    className="w-full h-full object-cover rounded-md"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {currentProduct.images && currentProduct.images.length <= 1 && (
+                            <div className="text-sm text-gray-500 italic">
+                              Only one image available for this product
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Template Preview */}
                 <div className="flex-1 p-4 bg-gray-100">

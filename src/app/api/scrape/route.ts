@@ -87,21 +87,41 @@ async function processSingleUrl(
   const bodyHtml = $("body").html() || "";
   const $body = cheerio.load(bodyHtml);
 
-  // Get full HTML content for AI processing
-  const fullContent = $body.html() || "";
+  // Try to extract only relevant sections first
+  let fullContent = "";
+  
+  // Remove unnecessary elements that might bloat the content
+  $body("script, style, nav, footer, .nav, .footer, .sidebar, .advertisement, .ads").remove();
+  
+  // Look for main content areas
+  const mainContent = $body("main, .main, .content, .product, .product-details, .product-info").html();
+  if (mainContent) {
+    fullContent = mainContent;
+  } else {
+    // Fallback to body content
+    fullContent = $body.html() || "";
+  }
+  
+  // Truncate content if it's too long (limit to ~100k tokens)
+  const maxLength = 100000; // Conservative limit
+  if (fullContent.length > maxLength) {
+    fullContent = fullContent.substring(0, maxLength) + "... [content truncated]";
+  }
 
   // Extract all information including best image in one OpenAI call
-  const extractionResponse = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an expert in e-commerce product information extraction. Analyze the provided webpage content and extract product information including the best product image. Be precise and only extract actual product information, not navigation or footer content. Pay special attention to finding the correct prices and the best product image.",
-      },
-      {
-        role: "user",
-        content: `Analyze this webpage content and extract the following information. Pay special attention to prices and look for both original and discounted prices. Also find the best product image URL.
+  let extractionResponse;
+  try {
+    extractionResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert in e-commerce product information extraction. Analyze the provided webpage content and extract product information including the best product image and all available product images. Be precise and only extract actual product information, not navigation or footer content. Pay special attention to finding the correct prices and the best product image.",
+        },
+        {
+          role: "user",
+          content: `Analyze this webpage content and extract the following information. Pay special attention to prices and look for both original and discounted prices. Also find the best product image URL and all available product images.
 
 Content: "${fullContent}"
 
@@ -113,7 +133,8 @@ Please return a JSON object with:
     "regularPrice": "Regular/original price (if found)",
     "salePrice": "Sale/discounted price (if found)",
     "discount": "Discount percentage or amount (if found)",
-    "bestImageUrl": "URL of the best product image (prefer OG images, then gallery images, avoid logos/icons)"
+    "bestImageUrl": "URL of the best product image (prefer OG images, then gallery images, avoid logos/icons)",
+    "allImages": ["array of all product image URLs found (gallery images, product photos, etc.)"]
 }
 
 Instructions:
@@ -129,12 +150,60 @@ Instructions:
   * Second priority: Product gallery images (main product photos)
   * Avoid: logos, icons, navigation images
   * Return full URL (convert relative URLs to absolute)
+- For allImages: find all product-related images including:
+  * Gallery images
+  * Product photos
+  * Thumbnail images
+  * Avoid: logos, icons, navigation images, social media icons
+  * Return full URLs (convert relative URLs to absolute)
+  * Remove duplicates
 - If any information is not found, return empty string for that field
 - Be precise and extract only actual product information`,
-      },
-    ],
-    response_format: { type: "json_object" },
-  });
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+  } catch (error: any) {
+    // If token limit exceeded, try with gpt-4o-mini and shorter content
+    if (error.code === 'context_length_exceeded') {
+      console.log("Token limit exceeded, trying with shorter content...");
+      
+      // Further truncate content
+      const shorterContent = fullContent.substring(0, 50000) + "... [content further truncated]";
+      
+      extractionResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an expert in e-commerce product information extraction. Extract key product information from the provided content.",
+          },
+          {
+            role: "user",
+            content: `Extract product information from this content:
+
+Content: "${shorterContent}"
+
+Return JSON:
+{
+    "language": "ISO language code",
+    "title": "Product title",
+    "description": "Product description (max 200 chars)",
+    "regularPrice": "Regular price",
+    "salePrice": "Sale price", 
+    "discount": "Discount",
+    "bestImageUrl": "Best product image URL",
+    "allImages": ["array of product image URLs"]
+}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+    } else {
+      throw error;
+    }
+  }
 
   const extractedData = JSON.parse(
     extractionResponse.choices[0].message.content || "{}"
@@ -144,7 +213,7 @@ Instructions:
   const productInfo: ProductInfo = {
     title: extractedData.title || "Product Title",
     description: extractedData.description || "Product Description",
-    images: [], // No longer needed since we get bestImageUrl directly
+    images: extractedData.allImages || [], // All available images
     language: extractedData.language || "en",
     bestImageUrl: extractedData.bestImageUrl || "",
     regularPrice: extractedData.regularPrice || "",

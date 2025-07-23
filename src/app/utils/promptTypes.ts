@@ -1,13 +1,13 @@
 import { TemplateType } from "../types/types";
 
 export const promptTypes: TemplateType[] = [
-  {
-    name: "Professional",
+   {
+      name: "Professional",
     description:
       "Clean, professional email template with clear CTAs and minimal design",
     system:
       "You are a strategic email marketing expert specializing in professional, trust-building campaigns that position brands as industry authorities and drive business growth through credible, value-driven messaging.",
-    user: `Create me an HTML email with professional colors and minimal emojis related to this product: {{product_name}}
+      user: `Create me an HTML email with professional colors and minimal emojis related to this product: {{product_name}}
 1. Longer bold product title with professional authority trigger (50 characters max)
 2. Short description of the product with key business benefits and trust triggers (maximum 100 characters)
 3. Pricing section with regular price {{regular_price}}, sale price {{sale_price}}, and discount {{discount}} (if available)
@@ -17,14 +17,14 @@ export const promptTypes: TemplateType[] = [
 
 - Image must be under the CTA button!
 `,
-  },
-  {
-    name: "Promotional",
+   },
+   {
+      name: "Promotional",
     description:
       "Eye-catching promotional email with emphasis on value and limited offers",
     system:
       "You are a strategic email marketing expert specializing in high-converting promotional campaigns that create urgency and drive immediate action through persuasive copywriting and psychological triggers.",
-    user: `Create me an HTML email with vibrant promotional colors and action-driving emojis related to this product: {{product_name}}
+      user: `Create me an HTML email with vibrant promotional colors and action-driving emojis related to this product: {{product_name}}
 1. Longer bold product title with urgency and value trigger (50 characters max)
 2. Short description of the product with key transformation benefits and scarcity triggers (maximum 100 characters)
 3. Prominent pricing section with regular price {{regular_price}}, sale price {{sale_price}}, and discount {{discount}} - make it eye-catching with savings highlighted
@@ -32,9 +32,9 @@ export const promptTypes: TemplateType[] = [
 5. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use bright, high-contrast colors related to the product)
 6. Image banner using {{image_url}} that links to the {{product_link}}
 `,
-  },
-  {
-    name: "Landing Page",
+   },
+   {
+      name: "Landing Page",
     description:
       "High-converting landing page style with urgency triggers and structured persuasion elements",
     system:
@@ -86,14 +86,14 @@ export const promptTypes: TemplateType[] = [
 - Sale Price: {{sale_price}}
 - Discount: {{discount}}
 `,
-  },
-  {
-    name: "Minimal",
+   },
+   {
+      name: "Minimal",
     description:
       "Clean, minimal design with focus on product image and simplicity",
     system:
       "You are a strategic email marketing expert specializing in minimalist, premium designs that communicate product quality and brand sophistication through elegant simplicity and strategic whitespace.",
-    user: `Create me an HTML email with clean minimal colors and subtle emojis related to this product: {{product_name}}
+      user: `Create me an HTML email with clean minimal colors and subtle emojis related to this product: {{product_name}}
 1. Longer bold product title with sophisticated quality trigger (50 characters max)
 2. Short description of the product with key premium features and elegance triggers (maximum 100 characters)
 3. Clean pricing display with regular price {{regular_price}}, sale price {{sale_price}}, and discount {{discount}} (minimal, elegant styling)
@@ -101,14 +101,14 @@ export const promptTypes: TemplateType[] = [
 5. Large rounded CTA button with bold text and upper case with {{product_link}} (button size must be 500px; 30px with text size 20px, use muted, sophisticated colors related to the product)
 6. Image banner using {{image_url}} that links to the {{product_link}}
 `,
-  },
-  {
-    name: "Elegant & Sophisticated",
+   },
+   {
+      name: "Elegant & Sophisticated",
     description:
       "Refined, premium design with sophisticated aesthetic for high-end products",
     system:
       "You are a strategic email marketing expert specializing in luxury brand communications that convey exclusivity, heritage, and premium positioning through sophisticated design and carefully crafted messaging.",
-    user: `Create me an HTML email with luxury colors and premium emojis related to this product: {{product_name}}
+      user: `Create me an HTML email with luxury colors and premium emojis related to this product: {{product_name}}
 1. Longer bold product title with exclusivity and heritage trigger (50 characters max)
 2. Short description of the product with key luxury features and prestige triggers (maximum 100 characters)
 3. Premium pricing presentation with regular price {{regular_price}}, sale price {{sale_price}}, and discount {{discount}} (luxury styling with gold accents)
@@ -118,13 +118,13 @@ export const promptTypes: TemplateType[] = [
 
 - Image must be under the CTA button!
 `,
-  },
-  {
-    name: "Modern & Sleek",
-    description: "Contemporary design with clean lines and modern aesthetic",
+   },
+   {
+      name: "Modern & Sleek",
+      description: "Contemporary design with clean lines and modern aesthetic",
     system:
       "You are a strategic email marketing expert specializing in cutting-edge, tech-forward designs that appeal to innovation-focused audiences and position brands as industry leaders in the digital age.",
-    user: `Create me an HTML email with modern tech colors and innovative emojis related to this product: {{product_name}}
+      user: `Create me an HTML email with modern tech colors and innovative emojis related to this product: {{product_name}}
 1. Longer bold product title with innovation and future-forward trigger (50 characters max)
 2. Short description of the product with key cutting-edge features and progress triggers (maximum 100 characters)
 3. Modern pricing display with regular price {{regular_price}}, sale price {{sale_price}}, and discount {{discount}} (sleek, tech-style presentation)
@@ -133,14 +133,14 @@ export const promptTypes: TemplateType[] = [
 6. Image banner using {{image_url}} that links to the {{product_link}}
 
 `,
-  },
-  {
-    name: "Text-Only",
+   },
+   {
+      name: "Text-Only",
     description:
       "Clean, text-focused design without images for faster loading and better accessibility",
     system:
       "You are a strategic email marketing expert specializing in warm, friendly, and persuasive text-only campaigns that create personal connections and drive engagement through compelling copywriting and seasonal awareness.",
-    user: `Write a marketing email that is warm, friendly, and persuasive, aimed at promoting a {{product_name}}. Based on the product's characteristics, you must infer which season it is best suited for, but do not mention the season explicitly. Follow these numbered instructions and respect the character limits for each section:
+      user: `Write a marketing email that is warm, friendly, and persuasive, aimed at promoting a {{product_name}}. Based on the product's characteristics, you must infer which season it is best suited for, but do not mention the season explicitly. Follow these numbered instructions and respect the character limits for each section:
 
 1. Introduction (max. 200 characters): Encourage the reader to get ready for the time of year that’s coming. Keep the tone upbeat and seasonal, and include emojis that reflect the appropriate atmosphere.
 
