@@ -9,6 +9,7 @@ import {
   LinkIcon,
   PaintBrushIcon,
   BeakerIcon,
+  ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import { promptTypes } from "@/app/utils/promptTypes";
 
@@ -102,20 +103,25 @@ export default function Templaito() {
   const [error, setError] = useState("");
   const [template, setTemplate] = useState<Template | null>(null);
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [selectedTemplateType, setSelectedTemplateType] = useState<number | null>(null);
+  const [selectedTemplateType, setSelectedTemplateType] = useState<
+    number | null
+  >(null);
   const [copied, setCopied] = useState(false);
-  const [step, setStep] = useState<"input" | "template-selection" | "processing" | "results">("input");
+  const [step, setStep] = useState<
+    "input" | "template-selection" | "processing" | "results"
+  >("input");
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [selectedProductIndex, setSelectedProductIndex] = useState<number>(0);
-  const [multiProductImageSelections, setMultiProductImageSelections] = useState<{ [key: number]: number }>({});
+  const [multiProductImageSelections, setMultiProductImageSelections] =
+    useState<{ [key: number]: number }>({});
   const previewRef = useRef<HTMLIFrameElement>(null);
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Filter out empty URLs
-    const validUrls = urls.filter(url => url.trim() !== "");
-    
+    const validUrls = urls.filter((url) => url.trim() !== "");
+
     if (validUrls.length === 0) {
       setError("Please enter at least one URL");
       return;
@@ -154,16 +160,16 @@ export default function Templaito() {
     setStep("processing");
 
     try {
-      const validUrls = urls.filter(url => url.trim() !== "");
-      
+      const validUrls = urls.filter((url) => url.trim() !== "");
+
       const response = await fetch("/api/scrape", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           url: validUrls.length === 1 ? validUrls[0] : validUrls, // Send single URL or array
-          templateType: promptTypes[templateIndex]
+          templateType: promptTypes[templateIndex],
         }),
       });
 
@@ -188,33 +194,99 @@ export default function Templaito() {
   const copyHtml = () => {
     if (template && productInfo) {
       let updatedHtml = template.html;
-      
+
       if (isMultiProduct && "products" in productInfo) {
         // For multi-product, replace each product's best image with selected image
         const multiProductInfo = productInfo as MultiProductInfo;
         multiProductInfo.products.forEach((product, productIndex) => {
-          const selectedImageIndex = multiProductImageSelections[productIndex] || 0;
-          const selectedImageUrl = product.images[selectedImageIndex] || product.bestImageUrl;
-          
+          const selectedImageIndex =
+            multiProductImageSelections[productIndex] || 0;
+          const selectedImageUrl =
+            product.images[selectedImageIndex] || product.bestImageUrl;
+
           if (selectedImageUrl !== product.bestImageUrl) {
             updatedHtml = updatedHtml.replace(
-              new RegExp(product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+              new RegExp(
+                product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                "g"
+              ),
               selectedImageUrl
             );
           }
         });
       } else {
         // For single product, replace the best image URL with the selected image URL
-        const selectedImageUrl = productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
+        const selectedImageUrl =
+          productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
         updatedHtml = template.html.replace(
-          new RegExp(productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+          new RegExp(
+            productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            "g"
+          ),
           selectedImageUrl
         );
       }
-      
+
       navigator.clipboard.writeText(updatedHtml);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handlePreview = () => {
+    if (template && productInfo) {
+      let updatedHtml = template.html;
+
+      if (isMultiProduct && "products" in productInfo) {
+        // For multi-product, replace each product's best image with selected image
+        const multiProductInfo = productInfo as MultiProductInfo;
+        multiProductInfo.products.forEach((product, productIndex) => {
+          const selectedImageIndex =
+            multiProductImageSelections[productIndex] || 0;
+          const selectedImageUrl =
+            product.images[selectedImageIndex] || product.bestImageUrl;
+
+          if (selectedImageUrl !== product.bestImageUrl) {
+            updatedHtml = updatedHtml.replace(
+              new RegExp(
+                product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                "g"
+              ),
+              selectedImageUrl
+            );
+          }
+        });
+      } else {
+        // For single product, replace the best image URL with the selected image URL
+        const selectedImageUrl =
+          productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
+        updatedHtml = template.html.replace(
+          new RegExp(
+            productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            "g"
+          ),
+          selectedImageUrl
+        );
+      }
+
+      // Open a new window and write the HTML directly
+      const previewWindow = window.open("", "_blank");
+      if (previewWindow) {
+        const styledHtml = `
+          <style>
+            body {
+              zoom: 0.75;
+              -moz-transform: scale(0.75);
+              -moz-transform-origin: 0 0;
+              margin: 0;
+              padding: 0;
+            }
+          </style>
+          ${updatedHtml}
+        `;
+        previewWindow.document.write(styledHtml);
+        previewWindow.document.close();
+      }
     }
   };
 
@@ -239,59 +311,77 @@ export default function Templaito() {
     setMultiProductImageSelections({});
   };
 
-  const handleMultiProductImageSelection = (productIndex: number, imageIndex: number) => {
-    setMultiProductImageSelections(prev => ({
+  const handleMultiProductImageSelection = (
+    productIndex: number,
+    imageIndex: number
+  ) => {
+    setMultiProductImageSelections((prev) => ({
       ...prev,
-      [productIndex]: imageIndex
+      [productIndex]: imageIndex,
     }));
   };
 
   // Determine which templates to show
-  const validUrls = urls.filter(url => url.trim() !== "");
+  const validUrls = urls.filter((url) => url.trim() !== "");
   const isMultiProduct = validUrls.length > 1;
-  const availableTemplates = isMultiProduct ? 
-    promptTypes.filter((_, index) => index === promptTypes.length - 1) : // Only Multi-Product Landing
-    promptTypes.slice(0, -1); // All except Multi-Product Landing
-  
-  const availableUIConfigs = isMultiProduct ?
-    [templateUIConfig[templateUIConfig.length - 1]] : // Only Multi-Product Landing UI
-    templateUIConfig.slice(0, -1); // All except Multi-Product Landing UI
+  const availableTemplates = isMultiProduct
+    ? promptTypes.filter((_, index) => index === promptTypes.length - 1) // Only Multi-Product Landing
+    : promptTypes.slice(0, -1); // All except Multi-Product Landing
+
+  const availableUIConfigs = isMultiProduct
+    ? [templateUIConfig[templateUIConfig.length - 1]] // Only Multi-Product Landing UI
+    : templateUIConfig.slice(0, -1); // All except Multi-Product Landing UI
 
   useEffect(() => {
     if (previewRef.current && template && productInfo) {
       const doc = previewRef.current.contentDocument;
       if (doc) {
         let updatedHtml = template.html;
-        
+
         if (isMultiProduct && "products" in productInfo) {
           // For multi-product, replace each product's best image with selected image
           const multiProductInfo = productInfo as MultiProductInfo;
           multiProductInfo.products.forEach((product, productIndex) => {
-            const selectedImageIndex = multiProductImageSelections[productIndex] || 0;
-            const selectedImageUrl = product.images[selectedImageIndex] || product.bestImageUrl;
-            
+            const selectedImageIndex =
+              multiProductImageSelections[productIndex] || 0;
+            const selectedImageUrl =
+              product.images[selectedImageIndex] || product.bestImageUrl;
+
             if (selectedImageUrl !== product.bestImageUrl) {
               updatedHtml = updatedHtml.replace(
-                new RegExp(product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                new RegExp(
+                  product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                  "g"
+                ),
                 selectedImageUrl
               );
             }
           });
         } else {
           // For single product, replace the best image URL with the selected image URL
-          const selectedImageUrl = productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
+          const selectedImageUrl =
+            productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
           updatedHtml = template.html.replace(
-            new RegExp(productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            new RegExp(
+              productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+              "g"
+            ),
             selectedImageUrl
           );
         }
-        
+
         doc.open();
         doc.write(updatedHtml);
         doc.close();
       }
     }
-  }, [template, productInfo, selectedImageIndex, isMultiProduct, multiProductImageSelections]);
+  }, [
+    template,
+    productInfo,
+    selectedImageIndex,
+    isMultiProduct,
+    multiProductImageSelections,
+  ]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -343,9 +433,9 @@ export default function Templaito() {
                 <div className="space-y-6">
                   <div className="relative">
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      Product URL{urls.length > 1 ? 's' : ''}
+                      Product URL{urls.length > 1 ? "s" : ""}
                     </label>
-                    
+
                     {/* URL Inputs */}
                     <div className="space-y-3">
                       {urls.map((url, index) => (
@@ -355,9 +445,13 @@ export default function Templaito() {
                             type="url"
                             value={url}
                             onChange={(e) => updateUrl(index, e.target.value)}
-                            placeholder={`https://example.com/product/amazing-widget-${index + 1}`}
+                            placeholder={`https://example.com/product/amazing-widget-${
+                              index + 1
+                            }`}
                             className="w-full pl-12 pr-12 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-500 duration-200 text-lg"
-                            onKeyPress={(e) => e.key === "Enter" && handleUrlSubmit(e)}
+                            onKeyPress={(e) =>
+                              e.key === "Enter" && handleUrlSubmit(e)
+                            }
                           />
                           {urls.length > 1 && (
                             <button
@@ -384,10 +478,9 @@ export default function Templaito() {
                         Add URL
                       </button>
                       <p className="text-sm text-gray-500">
-                        {urls.length === 1 ? 
-                          "Step 1: Enter your product URL ✨" : 
-                          `Step 1: ${validUrls.length} URLs for Multi-Product Landing 🛍️`
-                        }
+                        {urls.length === 1
+                          ? "Step 1: Enter your product URL ✨"
+                          : `Step 1: ${validUrls.length} URLs for Multi-Product Landing 🛍️`}
                       </p>
                     </div>
                   </div>
@@ -447,7 +540,8 @@ export default function Templaito() {
                     AI Copywriting + Design
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    OpenAI creates compelling copy while Claude designs beautiful HTML templates.
+                    OpenAI creates compelling copy while Claude designs
+                    beautiful HTML templates.
                   </p>
                 </div>
               </div>
@@ -462,23 +556,33 @@ export default function Templaito() {
                     Step 2: Choose Your Template Style
                   </h2>
                   <p className="text-lg text-gray-600">
-                    {isMultiProduct ? 
-                      "Multi-Product Landing Page - Perfect for showcasing multiple products" :
-                      "Select the email template style that best fits your campaign goals"
-                    }
+                    {isMultiProduct
+                      ? "Multi-Product Landing Page - Perfect for showcasing multiple products"
+                      : "Select the email template style that best fits your campaign goals"}
                   </p>
                   <div className="mt-4 text-sm text-gray-500">
                     {isMultiProduct ? (
                       <div className="space-y-1">
                         <div>Products ({validUrls.length}):</div>
                         {validUrls.map((url, index) => (
-                          <div key={index} className="font-mono bg-gray-100 px-2 py-1 rounded inline-block mr-2 mb-1">
-                            Product {index + 1}: {url.length > 50 ? url.substring(0, 50) + '...' : url}
+                          <div
+                            key={index}
+                            className="font-mono bg-gray-100 px-2 py-1 rounded inline-block mr-2 mb-1"
+                          >
+                            Product {index + 1}:{" "}
+                            {url.length > 50
+                              ? url.substring(0, 50) + "..."
+                              : url}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <span>URL: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{validUrls[0]}</span></span>
+                      <span>
+                        URL:{" "}
+                        <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+                          {validUrls[0]}
+                        </span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -486,10 +590,10 @@ export default function Templaito() {
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                   {availableTemplates.map((templateType, availableIndex) => {
                     // Map back to original template index
-                    const originalIndex = isMultiProduct ? 
-                      promptTypes.length - 1 : // Multi-Product Landing is last
-                      availableIndex; // Regular templates keep their index
-                    
+                    const originalIndex = isMultiProduct
+                      ? promptTypes.length - 1 // Multi-Product Landing is last
+                      : availableIndex; // Regular templates keep their index
+
                     return (
                       <button
                         key={availableIndex}
@@ -497,8 +601,12 @@ export default function Templaito() {
                         className={`text-left p-6 rounded-2xl transition-all duration-200 cursor-pointer transform hover:scale-105 hover:shadow-lg ${availableUIConfigs[availableIndex].bgColor} hover:bg-white/80 border-2 border-transparent hover:border-gray-200`}
                       >
                         <div className="flex items-center gap-3 mb-4">
-                          <span className="text-3xl">{availableUIConfigs[availableIndex].icon}</span>
-                          <span className={`font-bold text-lg ${availableUIConfigs[availableIndex].textColor}`}>
+                          <span className="text-3xl">
+                            {availableUIConfigs[availableIndex].icon}
+                          </span>
+                          <span
+                            className={`font-bold text-lg ${availableUIConfigs[availableIndex].textColor}`}
+                          >
                             {templateType.name}
                           </span>
                         </div>
@@ -532,7 +640,11 @@ export default function Templaito() {
               </div>
               <div className="mt-8 text-center">
                 <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                  Creating Your {selectedTemplateType !== null ? promptTypes[selectedTemplateType].name : ''} Template
+                  Creating Your{" "}
+                  {selectedTemplateType !== null
+                    ? promptTypes[selectedTemplateType].name
+                    : ""}{" "}
+                  Template
                 </h3>
                 <p className="text-lg text-gray-600 mb-6">
                   Our AI is crafting your perfect email template...
@@ -562,7 +674,11 @@ export default function Templaito() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-2xl font-bold mb-2">
-                      Your {selectedTemplateType !== null ? promptTypes[selectedTemplateType].name : ''} Template Is Ready! 🎉
+                      Your{" "}
+                      {selectedTemplateType !== null
+                        ? promptTypes[selectedTemplateType].name
+                        : ""}{" "}
+                      Template Is Ready! 🎉
                     </h2>
                     <p className="opacity-90">
                       {productInfo?.title && `For: ${productInfo.title}`}
@@ -593,15 +709,17 @@ export default function Templaito() {
                 <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">
-                      {selectedTemplateType !== null ? (
-                        isMultiProduct ? 
-                          templateUIConfig[templateUIConfig.length - 1].icon : // Multi-Product Landing icon
-                          templateUIConfig[selectedTemplateType].icon // Regular template icon
-                      ) : ''}
+                      {selectedTemplateType !== null
+                        ? isMultiProduct
+                          ? templateUIConfig[templateUIConfig.length - 1].icon // Multi-Product Landing icon
+                          : templateUIConfig[selectedTemplateType].icon // Regular template icon
+                        : ""}
                     </span>
                     <div>
                       <h3 className="font-semibold text-gray-800">
-                        {selectedTemplateType !== null ? promptTypes[selectedTemplateType].name : ''}
+                        {selectedTemplateType !== null
+                          ? promptTypes[selectedTemplateType].name
+                          : ""}
                       </h3>
                       <p className="text-sm text-gray-600">
                         {template.subject}
@@ -609,101 +727,127 @@ export default function Templaito() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={copyHtml}
-                    className={`inline-flex cursor-pointer items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
-                      copied
-                        ? "bg-green-100 text-green-700 border-2 border-green-200"
-                        : selectedTemplateType !== null
-                        ? `bg-gradient-to-r ${
-                            isMultiProduct ? 
-                              templateUIConfig[templateUIConfig.length - 1].color : // Multi-Product Landing color
-                              templateUIConfig[selectedTemplateType].color // Regular template color
-                          } text-white hover:shadow-lg transform hover:scale-105`
-                        : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-lg transform hover:scale-105"
-                    }`}
-                  >
-                    {copied ? (
-                      <>
-                        <CheckIcon className="w-5 h-5" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <DocumentDuplicateIcon className="w-5 h-5" />
-                        Copy HTML
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handlePreview}
+                      className={`inline-flex cursor-pointer items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-lg transform hover:scale-105`}
+                    >
+                      <ArrowTopRightOnSquareIcon className="w-5 h-5" />
+                      Preview
+                    </button>
+
+                    <button
+                      onClick={copyHtml}
+                      className={`inline-flex cursor-pointer items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
+                        copied
+                          ? "bg-green-100 text-green-700 border-2 border-green-200"
+                          : selectedTemplateType !== null
+                          ? `bg-gradient-to-r ${
+                              isMultiProduct
+                                ? templateUIConfig[templateUIConfig.length - 1]
+                                    .color // Multi-Product Landing color
+                                : templateUIConfig[selectedTemplateType].color // Regular template color
+                            } text-white hover:shadow-lg transform hover:scale-105`
+                          : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-lg transform hover:scale-105"
+                      }`}
+                    >
+                      {copied ? (
+                        <>
+                          <CheckIcon className="w-5 h-5" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <DocumentDuplicateIcon className="w-5 h-5" />
+                          Copy HTML
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Image Selector */}
-                {productInfo && !isMultiProduct && productInfo.images && productInfo.images.length > 1 && (
-                  <div className="p-4 bg-gray-50 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-gray-800">Choose Product Image</h4>
-                      <span className="text-sm text-gray-500">
-                        {selectedImageIndex + 1} of {productInfo.images.length}
-                      </span>
+                {productInfo &&
+                  !isMultiProduct &&
+                  productInfo.images &&
+                  productInfo.images.length > 1 && (
+                    <div className="p-4 bg-gray-50 border-b border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-800">
+                          Choose Product Image
+                        </h4>
+                        <span className="text-sm text-gray-500">
+                          {selectedImageIndex + 1} of{" "}
+                          {productInfo.images.length}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {productInfo.images.map((image, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setSelectedImageIndex(index)}
+                            className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                              selectedImageIndex === index
+                                ? "border-blue-500 ring-2 ring-blue-200"
+                                : "border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <img
+                              src={image}
+                              alt={`Product image ${index + 1}`}
+                              className="w-full h-full object-cover rounded-md"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-2">
-                      {productInfo.images.map((image, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setSelectedImageIndex(index)}
-                          className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
-                            selectedImageIndex === index
-                              ? 'border-blue-500 ring-2 ring-blue-200'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <img
-                            src={image}
-                            alt={`Product image ${index + 1}`}
-                            className="w-full h-full object-cover rounded-md"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Multi-Product Image Selector */}
                 {productInfo && isMultiProduct && "products" in productInfo && (
                   <div className="p-4 bg-gray-50 border-b border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-800">Choose Product Images</h4>
+                      <h4 className="font-semibold text-gray-800">
+                        Choose Product Images
+                      </h4>
                       <span className="text-sm text-gray-500">
-                        {(productInfo as MultiProductInfo).products.length} Products
+                        {(productInfo as MultiProductInfo).products.length}{" "}
+                        Products
                       </span>
                     </div>
-                    
+
                     {/* Product Tabs */}
                     <div className="flex gap-2 mb-4 overflow-x-auto">
-                      {(productInfo as MultiProductInfo).products.map((product: ProductInfo, productIndex: number) => (
-                        <button
-                          key={productIndex}
-                          onClick={() => setSelectedProductIndex(productIndex)}
-                          className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                            selectedProductIndex === productIndex
-                              ? 'bg-blue-500 text-white shadow-md'
-                              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                          }`}
-                        >
-                          Product {productIndex + 1}
-                        </button>
-                      ))}
+                      {(productInfo as MultiProductInfo).products.map(
+                        (product: ProductInfo, productIndex: number) => (
+                          <button
+                            key={productIndex}
+                            onClick={() =>
+                              setSelectedProductIndex(productIndex)
+                            }
+                            className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                              selectedProductIndex === productIndex
+                                ? "bg-blue-500 text-white shadow-md"
+                                : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                            }`}
+                          >
+                            Product {productIndex + 1}
+                          </button>
+                        )
+                      )}
                     </div>
 
                     {/* Selected Product Image Selection */}
                     {(() => {
                       const multiProductInfo = productInfo as MultiProductInfo;
-                      const currentProduct = multiProductInfo.products[selectedProductIndex];
-                      const currentSelectedImageIndex = multiProductImageSelections[selectedProductIndex] || 0;
-                      
+                      const currentProduct =
+                        multiProductInfo.products[selectedProductIndex];
+                      const currentSelectedImageIndex =
+                        multiProductImageSelections[selectedProductIndex] || 0;
+
                       return (
                         <div className="bg-white rounded-lg p-4">
                           <div className="flex items-center justify-between mb-3">
@@ -711,40 +855,53 @@ export default function Templaito() {
                               {currentProduct.title}
                             </h5>
                             <span className="text-sm text-gray-500">
-                              {currentSelectedImageIndex + 1} of {currentProduct.images.length}
+                              {currentSelectedImageIndex + 1} of{" "}
+                              {currentProduct.images.length}
                             </span>
                           </div>
-                          
-                          {currentProduct.images && currentProduct.images.length > 1 && (
-                            <div className="flex gap-2 overflow-x-auto pb-2">
-                              {currentProduct.images.map((image: string, imageIndex: number) => (
-                                <button
-                                  key={imageIndex}
-                                  onClick={() => handleMultiProductImageSelection(selectedProductIndex, imageIndex)}
-                                  className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
-                                    currentSelectedImageIndex === imageIndex
-                                      ? 'border-blue-500 ring-2 ring-blue-200'
-                                      : 'border-gray-200 hover:border-gray-300'
-                                  }`}
-                                >
-                                  <img
-                                    src={image}
-                                    alt={`Product ${selectedProductIndex + 1} image ${imageIndex + 1}`}
-                                    className="w-full h-full object-cover rounded-md"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {currentProduct.images && currentProduct.images.length <= 1 && (
-                            <div className="text-sm text-gray-500 italic">
-                              Only one image available for this product
-                            </div>
-                          )}
+
+                          {currentProduct.images &&
+                            currentProduct.images.length > 1 && (
+                              <div className="flex gap-2 overflow-x-auto pb-2">
+                                {currentProduct.images.map(
+                                  (image: string, imageIndex: number) => (
+                                    <button
+                                      key={imageIndex}
+                                      onClick={() =>
+                                        handleMultiProductImageSelection(
+                                          selectedProductIndex,
+                                          imageIndex
+                                        )
+                                      }
+                                      className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                                        currentSelectedImageIndex === imageIndex
+                                          ? "border-blue-500 ring-2 ring-blue-200"
+                                          : "border-gray-200 hover:border-gray-300"
+                                      }`}
+                                    >
+                                      <img
+                                        src={image}
+                                        alt={`Product ${
+                                          selectedProductIndex + 1
+                                        } image ${imageIndex + 1}`}
+                                        className="w-full h-full object-cover rounded-md"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display =
+                                            "none";
+                                        }}
+                                      />
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            )}
+
+                          {currentProduct.images &&
+                            currentProduct.images.length <= 1 && (
+                              <div className="text-sm text-gray-500 italic">
+                                Only one image available for this product
+                              </div>
+                            )}
                         </div>
                       );
                     })()}
