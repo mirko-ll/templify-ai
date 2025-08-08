@@ -1,0 +1,118 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  accounts         Account[]
+  sessions         Session[]
+  profile          Profile?
+  templateUsage    TemplateUsage[]
+}
+
+model Profile {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  phoneNumber     String?
+  address         String?
+  city            String?
+  country         String?
+  postalCode      String?
+  
+  // Company details
+  companyName     String?
+  companyWebsite  String?
+  companyIndustry String?
+  jobTitle        String?
+  companySize     String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model TemplateUsage {
+  id        String   @id @default(cuid())
+  userId    String?  // Optional - can track anonymous users too
+  
+  // Core Template Data
+  templateType     String   // Professional, Promotional, etc.
+  templateId       Int      // Template index (0-8)
+  
+  // URL Data
+  urlCount         Int      // Number of URLs processed (1 or multiple)
+  
+  // User Context (from profile if available)
+  userIndustry     String?  // User's company industry
+  userCompanySize  String?  // Company size segment
+  userCountry      String?  // Geographic segment
+  
+  // Success/Failure
+  wasSuccessful    Boolean  // Did the generation succeed
+  
+  // Timestamp
+  createdAt        DateTime @default(now())
+  
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([templateType])
+  @@index([templateId])
+  @@index([createdAt])
+  @@index([userIndustry])
+  @@index([userCompanySize])
+  @@index([wasSuccessful])
+}
+

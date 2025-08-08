@@ -182,10 +182,48 @@ export default function Templaito() {
       setTemplate(data.emailTemplate);
       setProductInfo(data.productInfo);
       setStep("results");
+
+      // Track successful template generation
+      try {
+        await fetch("/api/track", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            templateType: promptTypes[templateIndex].name,
+            templateId: templateIndex,
+            urlCount: validUrls.length,
+            wasSuccessful: true,
+          }),
+        });
+      } catch (trackingError) {
+        console.log("Analytics tracking failed:", trackingError);
+        // Don't break user experience if tracking fails
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to process URL(s). Please try different product URLs.");
       setStep("template-selection");
+
+      // Track failed template generation
+      try {
+        await fetch("/api/track", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            templateType: promptTypes[templateIndex].name,
+            templateId: templateIndex,
+            urlCount: validUrls.length,
+            wasSuccessful: false,
+          }),
+        });
+      } catch (trackingError) {
+        console.log("Analytics tracking failed:", trackingError);
+        // Don't break user experience if tracking fails
+      }
     } finally {
       setLoading(false);
     }

@@ -89,10 +89,10 @@ async function processSingleUrl(
 
   // Try to extract only relevant sections first
   let fullContent = "";
-  
+
   // Remove unnecessary elements that might bloat the content
   $body("script, style, nav, footer, .nav, .footer, .sidebar, .advertisement, .ads").remove();
-  
+
   // Look for main content areas
   const mainContent = $body("main, .main, .content, .product, .product-details, .product-info").html();
   if (mainContent) {
@@ -101,7 +101,7 @@ async function processSingleUrl(
     // Fallback to body content
     fullContent = $body.html() || "";
   }
-  
+
   // Truncate content if it's too long (limit to ~100k tokens)
   const maxLength = 100000; // Conservative limit
   if (fullContent.length > maxLength) {
@@ -167,10 +167,10 @@ Instructions:
     // If token limit exceeded, try with gpt-4o-mini and shorter content
     if (error.code === 'context_length_exceeded') {
       console.log("Token limit exceeded, trying with shorter content...");
-      
+
       // Further truncate content
       const shorterContent = fullContent.substring(0, 50000) + "... [content further truncated]";
-      
+
       extractionResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -305,9 +305,8 @@ async function generateEmailTemplate(
                     Sale Price: ${singleProductInfo.salePrice}
                     Discount: ${singleProductInfo.discount}
                     
-                    Generate email content in ${
-                      singleProductInfo.language
-                    } language.
+                    Generate email content in ${singleProductInfo.language
+            } language.
                     
                     Please return a JSON object with:
                     {
