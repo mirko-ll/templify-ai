@@ -434,15 +434,46 @@ export default function Templaito() {
 
   if (status === "loading") {
     return (
-      <div className="flex flex-col items-center justify-center py-32 min-h-screen">
-        <div className="relative">
-          <div className="w-32 h-32 border-8 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <SparklesIcon className="w-12 h-12 text-indigo-600 animate-pulse" />
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+        {/* Background Elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-0 -right-4 w-96 h-96 bg-gradient-to-bl from-indigo-200/30 to-purple-200/30 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
+          <div className="absolute -bottom-8 -left-4 w-96 h-96 bg-gradient-to-tr from-purple-200/30 to-pink-200/30 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
         </div>
-        <div className="mt-8 text-center">
-          <h3 className="text-2xl font-bold text-gray-800 mb-2">Loading...</h3>
+
+        <div className="relative z-10 text-center">
+          {/* Logo */}
+          <div className="flex items-center justify-center mb-12">
+            <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl flex items-center justify-center shadow-2xl mr-4 animate-pulse">
+              <SparklesIcon className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              TemplAIto
+            </h1>
+          </div>
+
+          {/* Loading Animation */}
+          <div className="relative mb-8">
+            <div className="w-24 h-24 mx-auto">
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin"></div>
+              <div className="absolute inset-2 rounded-full border-4 border-transparent border-t-purple-600 animate-spin" style={{animationDirection: 'reverse', animationDuration: '1.5s'}}></div>
+              <div className="absolute inset-4 rounded-full border-4 border-transparent border-t-pink-600 animate-spin" style={{animationDuration: '2s'}}></div>
+            </div>
+          </div>
+
+          {/* Loading Text */}
+          <div className="space-y-2">
+            <h3 className="text-2xl font-bold text-gray-800">Getting things ready...</h3>
+            <p className="text-gray-600">Preparing your AI-powered email template generator</p>
+          </div>
+
+          {/* Loading Dots */}
+          <div className="flex justify-center space-x-2 mt-8">
+            <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce"></div>
+            <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          </div>
         </div>
       </div>
     );
