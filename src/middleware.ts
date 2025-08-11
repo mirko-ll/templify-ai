@@ -6,14 +6,13 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token, req }) => {
-        // Protect the main app page - require authentication
-        if (req.nextUrl.pathname === "/" || req.nextUrl.pathname.startsWith("/profile")) {
-          return !!token
-        }
-        // Allow access to auth pages and API routes
-        return true
+      authorized: ({ token }) => {
+        // Require authentication for protected routes
+        return !!token
       },
+    },
+    pages: {
+      signIn: "/auth/signin",
     },
   }
 )
