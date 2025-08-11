@@ -14,91 +14,10 @@ import {
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import Image from "next/image";
+import ExternalImage from "@/components/ui/external-image";
 import { promptTypes } from "@/app/utils/promptTypes";
-
-interface Template {
-  subject: string;
-  html: string;
-}
-
-interface ProductInfo {
-  title: string;
-  description: string;
-  images: string[];
-  bestImageUrl: string;
-  language: string;
-  regularPrice: string;
-  salePrice: string;
-  discount: string;
-}
-
-interface MultiProductInfo {
-  products: ProductInfo[];
-  language: string;
-}
-
-interface Template {
-  subject: string;
-  html: string;
-}
-
-// Template type icons and colors for UI display
-const templateUIConfig = [
-  {
-    icon: "💼",
-    color: "from-blue-500 to-indigo-600",
-    bgColor: "bg-blue-50",
-    textColor: "text-blue-700",
-  },
-  {
-    icon: "🎯",
-    color: "from-red-500 to-pink-600",
-    bgColor: "bg-red-50",
-    textColor: "text-red-700",
-  },
-  {
-    icon: "📈",
-    color: "from-orange-500 to-red-600",
-    bgColor: "bg-orange-50",
-    textColor: "text-orange-700",
-  },
-  {
-    icon: "✨",
-    color: "from-gray-500 to-slate-600",
-    bgColor: "bg-gray-50",
-    textColor: "text-gray-700",
-  },
-  {
-    icon: "✦",
-    color: "from-amber-700 to-stone-800",
-    bgColor: "bg-amber-50",
-    textColor: "text-amber-800",
-  },
-  {
-    icon: "🚀",
-    color: "from-emerald-500 to-teal-600",
-    bgColor: "bg-emerald-50",
-    textColor: "text-emerald-700",
-  },
-  {
-    icon: "📝",
-    color: "from-indigo-500 to-violet-600",
-    bgColor: "bg-indigo-50",
-    textColor: "text-indigo-700",
-  },
-  {
-    icon: "📰",
-    color: "from-cyan-500 to-blue-600",
-    bgColor: "bg-cyan-50",
-    textColor: "text-cyan-700",
-  },
-  {
-    icon: "🛍️",
-    color: "from-purple-500 to-pink-600",
-    bgColor: "bg-purple-50",
-    textColor: "text-purple-700",
-  },
-];
+import { templateUIConfig } from "@/lib/template-config";
+import type { Template, ProductInfo, MultiProductInfo, TemplateStep } from "@/types/template";
 
 export default function Templaito() {
   const { status } = useSession();
@@ -112,9 +31,7 @@ export default function Templaito() {
     number | null
   >(null);
   const [copied, setCopied] = useState(false);
-  const [step, setStep] = useState<
-    "input" | "template-selection" | "processing" | "results"
-  >("input");
+  const [step, setStep] = useState<TemplateStep>("input");
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [selectedProductIndex, setSelectedProductIndex] = useState<number>(0);
   const [multiProductImageSelections, setMultiProductImageSelections] =
@@ -434,45 +351,23 @@ export default function Templaito() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
-        {/* Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 -right-4 w-96 h-96 bg-gradient-to-bl from-indigo-200/30 to-purple-200/30 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-4 w-96 h-96 bg-gradient-to-tr from-purple-200/30 to-pink-200/30 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        {/* Animated Background Elements */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse animation-delay-2000"></div>
+          <div className="absolute top-40 left-40 w-80 h-80 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse animation-delay-4000"></div>
         </div>
 
-        <div className="relative z-10 text-center">
-          {/* Logo */}
-          <div className="flex items-center justify-center mb-12">
-            <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl flex items-center justify-center shadow-2xl mr-4 animate-pulse">
-              <SparklesIcon className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              TemplAIto
-            </h1>
-          </div>
-
-          {/* Loading Animation */}
-          <div className="relative mb-8">
-            <div className="w-24 h-24 mx-auto">
-              <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin"></div>
-              <div className="absolute inset-2 rounded-full border-4 border-transparent border-t-purple-600 animate-spin" style={{animationDirection: 'reverse', animationDuration: '1.5s'}}></div>
-              <div className="absolute inset-4 rounded-full border-4 border-transparent border-t-pink-600 animate-spin" style={{animationDuration: '2s'}}></div>
+        <div className="relative z-10 flex flex-col items-center justify-center py-32 min-h-screen">
+          <div className="relative">
+            <div className="w-32 h-32 border-8 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <SparklesIcon className="w-12 h-12 text-indigo-600 animate-pulse" />
             </div>
           </div>
-
-          {/* Loading Text */}
-          <div className="space-y-2">
-            <h3 className="text-2xl font-bold text-gray-800">Getting things ready...</h3>
-            <p className="text-gray-600">Preparing your AI-powered email template generator</p>
-          </div>
-
-          {/* Loading Dots */}
-          <div className="flex justify-center space-x-2 mt-8">
-            <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce"></div>
-            <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-            <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          <div className="mt-8 text-center">
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Loading...</h3>
           </div>
         </div>
       </div>
@@ -888,7 +783,7 @@ export default function Templaito() {
                                 : "border-gray-200 hover:border-gray-300"
                             }`}
                           >
-                            <Image
+                            <ExternalImage
                               src={image}
                               alt={`Product image ${index + 1}`}
                               className="w-full h-full object-cover rounded-md"
@@ -977,7 +872,7 @@ export default function Templaito() {
                                           : "border-gray-200 hover:border-gray-300"
                                       }`}
                                     >
-                                      <Image
+                                      <ExternalImage
                                         src={image}
                                         alt={`Product ${
                                           selectedProductIndex + 1

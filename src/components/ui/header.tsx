@@ -20,8 +20,17 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/auth/signin" })
+  const handleSignOut = async () => {
+    try {
+      await signOut({ 
+        callbackUrl: "/auth/signin",
+        redirect: true 
+      })
+    } catch (error) {
+      console.error('Sign out error:', error)
+      // Force redirect even if sign out fails
+      window.location.href = "/auth/signin"
+    }
   }
 
   if (status === "loading") {
