@@ -1,23 +1,23 @@
-import withAuth from 'next-auth/middleware';
-import { NextResponse } from 'next/server';
+import { withAuth } from 'next-auth/middleware';
 
 export default withAuth(
-  (req) => {
-    const token = req.nextauth.token;
-
-
-    if (!token) {
-      return NextResponse.redirect(new URL('/auth/signin', req.url));
-    }
-
-    return NextResponse.rewrite(new URL(req.url));
+  function middleware(req) {
+    // Optional: Add any custom logic here
+    console.log('Middleware token:', req.nextauth.token ? 'exists' : 'missing');
   },
+  {
+    callbacks: {
+      authorized: ({ token }) => {
+        // Return true if user is authenticated, false to redirect
+        return !!token;
+      },
+    },
+    pages: {
+      signIn: '/auth/signin',
+    },
+  }
 );
 
 export const config = {
-  // restricted routes
-  matcher: [
-    '/',
-    '/profile/:path*',
-  ],
+  matcher: ['/', '/profile/:path*'],
 };
