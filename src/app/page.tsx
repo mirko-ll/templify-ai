@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import {
   DocumentDuplicateIcon,
   CheckIcon,
@@ -11,6 +13,7 @@ import {
   BeakerIcon,
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
+import Image from "next/image";
 import { promptTypes } from "@/app/utils/promptTypes";
 
 interface Template {
@@ -98,6 +101,8 @@ const templateUIConfig = [
 ];
 
 export default function Templaito() {
+  const { status } = useSession();
+  const router = useRouter();
   const [urls, setUrls] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -420,6 +425,28 @@ export default function Templaito() {
     isMultiProduct,
     multiProductImageSelections,
   ]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/auth/signin");
+    }
+  }, [status, router]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 min-h-screen">
+        <div className="relative">
+          <div className="w-32 h-32 border-8 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <SparklesIcon className="w-12 h-12 text-indigo-600 animate-pulse" />
+          </div>
+        </div>
+        <div className="mt-8 text-center">
+          <h3 className="text-2xl font-bold text-gray-800 mb-2">Loading...</h3>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -830,10 +857,12 @@ export default function Templaito() {
                                 : "border-gray-200 hover:border-gray-300"
                             }`}
                           >
-                            <img
+                            <Image
                               src={image}
                               alt={`Product image ${index + 1}`}
                               className="w-full h-full object-cover rounded-md"
+                              width={64}
+                              height={64}
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
                               }}
@@ -917,12 +946,14 @@ export default function Templaito() {
                                           : "border-gray-200 hover:border-gray-300"
                                       }`}
                                     >
-                                      <img
+                                      <Image
                                         src={image}
                                         alt={`Product ${
                                           selectedProductIndex + 1
                                         } image ${imageIndex + 1}`}
                                         className="w-full h-full object-cover rounded-md"
+                                        width={64}
+                                        height={64}
                                         onError={(e) => {
                                           e.currentTarget.style.display =
                                             "none";
