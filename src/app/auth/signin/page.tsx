@@ -15,6 +15,7 @@ import {
   ShieldCheckIcon,
   GlobeAltIcon,
 } from "@heroicons/react/24/outline";
+import Link from "next/link";
 
 export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +24,7 @@ export default function SignIn() {
   useEffect(() => {
     getSession().then((session) => {
       if (session) {
-        router.push("/");
+        router.push("/app");
       }
     });
   }, [router]);
@@ -31,7 +32,7 @@ export default function SignIn() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      await signIn("google", { callbackUrl: "/" });
+      await signIn("google", { callbackUrl: "/app" });
     } catch (error) {
       console.error("Sign in error:", error);
     } finally {
@@ -53,14 +54,17 @@ export default function SignIn() {
         <div className="flex-1 flex items-center justify-center p-8 lg:p-16">
           <div className="max-w-lg">
             {/* Logo */}
-            <div className="flex items-center mb-8">
-              <div className="w-16 h-16 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl mr-4 animate-pulse">
+            <Link
+              href="/"
+              className="flex items-center mb-8 group cursor-pointer hover:scale-105 transition-all duration-300"
+            >
+              <div className="w-16 h-16 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl mr-4 animate-pulse group-hover:shadow-2xl transition-all duration-300">
                 <SparklesIcon className="w-8 h-8 text-white" />
               </div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent group-hover:from-indigo-700 group-hover:via-purple-700 group-hover:to-pink-700 transition-all duration-300">
                 TemplAIto
               </h1>
-            </div>
+            </Link>
 
             {/* Hero Title */}
             <h2 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
