@@ -1343,14 +1343,14 @@ export default function LandingPage() {
             {[
               {
                 icon: <BeakerIcon className="w-10 h-10" />,
-                title: "Dual AI Power",
+                title: "Advanced AI Engine",
                 description:
-                  "OpenAI creates compelling copy while Claude designs beautiful HTML templates.",
+                  "Cutting-edge artificial intelligence creates compelling copy and stunning HTML designs automatically.",
                 gradient: "from-blue-500 to-indigo-600",
                 features: [
-                  "GPT-4 Copywriting",
-                  "Claude Design",
-                  "Perfect Harmony",
+                  "Smart Copywriting",
+                  "Beautiful Design",
+                  "Perfect Integration",
                 ],
               },
               {
