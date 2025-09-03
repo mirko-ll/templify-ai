@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
@@ -16,7 +19,8 @@ const anthropic = new Anthropic({
 
 export async function POST(request: Request) {
   try {
-    const { url, templateType } = await request.json();
+    const session = await getServerSession(authOptions);
+    const { url, templateType, isTest } = await request.json();
 
     if (!url) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
@@ -29,37 +33,151 @@ export async function POST(request: Request) {
       );
     }
 
+    let effectiveTemplate;
+    let dbPrompt = null;
+
+    if (isTest) {
+      // For test requests from create/edit pages, use the provided templateType directly
+      // This ensures we test exactly what's in the form, not database values
+      effectiveTemplate = templateType;
+    } else {
+      // For regular requests from main app, look up database prompt
+      dbPrompt = await prisma.prompt.findFirst({
+        where: {
+          name: templateType.name,
+          status: 'ACTIVE',
+        },
+      });
+
+      // If no database prompt found, fall back to the provided templateType
+      effectiveTemplate = dbPrompt ? {
+        name: dbPrompt.name,
+        description: dbPrompt.description || templateType.description,
+        system: dbPrompt.systemPrompt,
+        user: dbPrompt.userPrompt,
+        designEngine: dbPrompt.designEngine,
+      } : templateType;
+    }
+
     // Handle multiple URLs for Multi-Product Landing
     const isMultiProduct = Array.isArray(url);
+    const startTime = Date.now();
+    let wasSuccessful = false;
 
-    if (isMultiProduct) {
-      // Process multiple URLs
-      const productInfos = await processMultipleUrls(url, templateType);
-      const template = await generateMultiProductTemplate(
-        productInfos,
-        url,
-        templateType,
-        openai,
-        anthropic
-      );
+    try {
+      if (isMultiProduct) {
+        // Process multiple URLs
+        const productInfos = await processMultipleUrls(url, effectiveTemplate);
+        const template = await generateMultiProductTemplate(
+          productInfos,
+          url,
+          effectiveTemplate,
+          openai,
+          anthropic
+        );
 
-      return NextResponse.json({
-        productInfo: productInfos,
-        emailTemplate: template,
-      });
-    } else {
-      // Process single URL (existing logic)
-      const productInfo = await processSingleUrl(url, templateType);
-      const template = await generateEmailTemplate(
-        productInfo,
-        url,
-        templateType
-      );
+        wasSuccessful = true;
 
-      return NextResponse.json({
-        productInfo,
-        emailTemplate: template,
-      });
+        const generationTime = Date.now() - startTime;
+
+        // Log analytics if we used a database prompt
+        if (dbPrompt && ((session as any)?.user as any)?.id) {
+          await prisma.templateGeneration.create({
+            data: {
+              promptId: dbPrompt.id,
+              userId: ((session as any).user as any).id,
+              inputUrl: url[0],
+              productInfo: productInfos as any,
+              generatedHtml: template.html,
+              subject: template.subject,
+              generationTime,
+              wasSuccessful,
+            },
+          });
+
+          // Update prompt usage count
+          await prisma.prompt.update({
+            where: { id: dbPrompt.id },
+            data: {
+              usageCount: {
+                increment: 1,
+              },
+            },
+          });
+        }
+
+        return NextResponse.json({
+          productInfo: productInfos,
+          emailTemplate: template,
+        });
+      } else {
+        // Process single URL using effective template (database or fallback)
+        const productInfo = await processSingleUrl(url, effectiveTemplate);
+        const template = await generateEmailTemplate(
+          productInfo,
+          url,
+          effectiveTemplate
+        );
+
+        wasSuccessful = true;
+        const generationTime = Date.now() - startTime;
+
+        // Log analytics if we used a database prompt
+        if (dbPrompt && ((session as any)?.user as any)?.id) {
+          await prisma.templateGeneration.create({
+            data: {
+              promptId: dbPrompt.id,
+              userId: ((session as any).user as any).id,
+              inputUrl: url,
+              productInfo: productInfo as any,
+              generatedHtml: template.html,
+              subject: template.subject,
+              generationTime,
+              wasSuccessful,
+            },
+          });
+
+          // Update prompt usage count
+          await prisma.prompt.update({
+            where: { id: dbPrompt.id },
+            data: {
+              usageCount: {
+                increment: 1,
+              },
+            },
+          });
+        }
+
+        return NextResponse.json({
+          productInfo,
+          emailTemplate: template,
+          promptUsed: dbPrompt ? {
+            id: dbPrompt.id,
+            name: dbPrompt.name,
+            designEngine: dbPrompt.designEngine,
+          } : null,
+          generationTime,
+        });
+      }
+    } catch (error: any) {
+      // Log failed generation if we used a database prompt
+      if (dbPrompt && ((session as any)?.user as any)?.id) {
+        await prisma.templateGeneration.create({
+          data: {
+            promptId: dbPrompt.id,
+            userId: ((session as any).user as any).id,
+            inputUrl: url,
+            productInfo: {} as any,
+            generatedHtml: "",
+            subject: "",
+            generationTime: Date.now() - startTime,
+            wasSuccessful: false,
+            errorMessage: error.message,
+          },
+        });
+      }
+
+      throw error;
     }
   } catch (error) {
     console.error("Error processing URL:", error);
@@ -166,8 +284,6 @@ Instructions:
   } catch (error: any) {
     // If token limit exceeded, try with gpt-4o-mini and shorter content
     if (error.code === 'context_length_exceeded') {
-      console.log("Token limit exceeded, trying with shorter content...");
-
       // Further truncate content
       const shorterContent = fullContent.substring(0, 50000) + "... [content further truncated]";
 
@@ -260,7 +376,7 @@ async function processMultipleUrls(
 async function generateEmailTemplate(
   productInfo: ProductInfo | MultiProductInfo,
   productUrls: string | string[],
-  templateType: TemplateType
+  templateType: any
 ) {
   // Check if it's multi-product or single product
   const isMultiProduct = "products" in productInfo;
@@ -275,7 +391,7 @@ async function generateEmailTemplate(
       anthropic
     );
   } else {
-    // Handle single product template (existing logic)
+    // Handle single product template with dynamic AI engine selection
     const singleProductInfo = productInfo as ProductInfo;
     // Step 1: OpenAI generates the email content/copy
     const contentResponse = await openai.chat.completions.create({
@@ -325,14 +441,33 @@ async function generateEmailTemplate(
       contentResponse.choices[0].message.content || "{}"
     );
 
-    // Step 2: Claude generates the HTML design using the content from OpenAI
-    const designResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      messages: [
-        {
-          role: "user",
-          content: `You are an expert HTML email developer. Create a single product email template.
+    // Step 2: Generate HTML design using the specified AI engine
+    if (templateType.designEngine === 'GPT4O') {
+      return await generateWithGPT4O(emailContent, singleProductInfo, urls[0], templateType);
+    } else {
+      return await generateWithClaude(emailContent, singleProductInfo, urls[0], templateType);
+    }
+  }
+}
+
+async function generateWithGPT4O(
+  emailContent: any,
+  productInfo: ProductInfo,
+  productUrl: string,
+  templateType: any
+) {
+  console.log("Generating with GPT4O");
+  console.log(productInfo);
+  const designResponse = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: templateType.system
+      },
+      {
+        role: "user",
+        content: `You are an expert HTML email developer. Create a single product email template.
 
 CRITICAL INSTRUCTION: You must return ONLY pure HTML code. Do NOT wrap it in JSON. Do NOT use markdown code blocks. Do NOT include explanations.
 
@@ -340,30 +475,21 @@ Your response should start with: <!DOCTYPE html>
 Your response should end with: </html>
 
 MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
-                 1. Include full HTML document structure (DOCTYPE, html, head, body)
-                 2. Add necessary meta tags in head for email client compatibility
-                 3. Use a table-based layout for maximum email client compatibility
-                 4. Center all content in the email
-                 5. Use inline CSS for all styling (no external CSS or style tags)
-                 6. Set a max-width of 600px for the main content
-                 7. Use web-safe fonts
-                 8. Create beautiful, modern, and professional design
-                 9. Ensure all images have proper alt text
-                 10. Use padding instead of margins where possible
-                 11. Links should always open in a new tab
-                 12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
+1. Include full HTML document structure (DOCTYPE, html, head, body)
+2. Add necessary meta tags in head for email client compatibility
+3. Use a table-based layout for maximum email client compatibility
+4. Center all content in the email
+5. Use inline CSS for all styling (no external CSS or style tags)
+6. Set a max-width of 600px for the main content
+7. Use web-safe fonts
+8. Create beautiful, modern, and professional design
+9. Ensure all images have proper alt text
+10. Use padding instead of margins where possible
+11. Links should always open in a new tab
+12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
 
-TEMPLATE-SPECIFIC REQUIREMENTS:
-Template Type: ${templateType.name} - ${templateType.description}
-
-SPECIFIC DESIGN INSTRUCTIONS FROM TEMPLATE TYPE:
+SPECIFIC DESIGN INSTRUCTIONS FROM TEMPLATE:
 ${templateType.user}
-
-Template Requirements:
-- Single product email template
-- Template style: ${templateType.name} - ${templateType.description}
-- Mobile responsive design using inline CSS media queries
-- Include product image, title, description, pricing, CTA button
 
 Email Content to Use:
 - Subject: ${emailContent.subject}
@@ -372,49 +498,117 @@ Email Content to Use:
 - CTA Text: ${emailContent.ctaText}
 
 Product Details:
-- Name: ${singleProductInfo.title}
-- Description: ${singleProductInfo.description}
-- Image: ${singleProductInfo.bestImageUrl}
-- Regular Price: ${singleProductInfo.regularPrice}
-- Sale Price: ${singleProductInfo.salePrice}
-- Discount: ${singleProductInfo.discount}
-- Link: ${urls[0]}
+- Name: ${productInfo.title}
+- Description: ${productInfo.description}
+- Image: ${productInfo.bestImageUrl}
+- Regular Price: ${productInfo.regularPrice}
+- Sale Price: ${productInfo.salePrice}
+- Discount: ${productInfo.discount}
+- Link: ${productUrl}
 
-CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute or any other HTML link format.
+CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
+
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above.`
+      }
+    ],
+    max_tokens: 4000,
+  });
+
+  const htmlContent = designResponse.choices[0].message.content?.trim() || "";
+
+  return {
+    html: htmlContent,
+    subject: emailContent.subject || "Email Template",
+    engine: 'GPT4O'
+  };
+}
+
+async function generateWithClaude(
+  emailContent: any,
+  productInfo: ProductInfo,
+  productUrl: string,
+  templateType: any
+) {
+  const designResponse = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: `${templateType.system}
+
+CRITICAL INSTRUCTION: You must return ONLY pure HTML code. Do NOT wrap it in JSON. Do NOT use markdown code blocks. Do NOT include explanations.
+
+Your response should start with: <!DOCTYPE html>
+Your response should end with: </html>
+
+MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
+1. Include full HTML document structure (DOCTYPE, html, head, body)
+2. Add necessary meta tags in head for email client compatibility
+3. Use a table-based layout for maximum email client compatibility
+4. Center all content in the email
+5. Use inline CSS for all styling (no external CSS or style tags)
+6. Set a max-width of 600px for the main content
+7. Use web-safe fonts
+8. Create beautiful, modern, and professional design
+9. Ensure all images have proper alt text
+10. Use padding instead of margins where possible
+11. Links should always open in a new tab
+12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
+
+TEMPLATE-SPECIFIC REQUIREMENTS:
+Template: ${templateType.name} - ${templateType.description}
+
+SPECIFIC DESIGN INSTRUCTIONS FROM TEMPLATE:
+${templateType.user}
+
+Email Content to Use:
+- Subject: ${emailContent.subject}
+- Headline: ${emailContent.headline}
+- Body: ${emailContent.bodyText}
+- CTA Text: ${emailContent.ctaText}
+
+Product Details:
+- Name: ${productInfo.title}
+- Description: ${productInfo.description}
+- Image: ${productInfo.bestImageUrl}
+- Regular Price: ${productInfo.regularPrice}
+- Sale Price: ${productInfo.salePrice}
+- Discount: ${productInfo.discount}
+- Link: ${productUrl}
+
+CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
 
 REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above AND the specific template design instructions.`,
-        },
-      ],
-    });
+      },
+    ],
+  });
 
-    const rawContent =
-      designResponse.content[0].type === "text"
-        ? designResponse.content[0].text
-        : "";
+  const rawContent = designResponse.content[0].type === "text"
+    ? designResponse.content[0].text
+    : "";
 
-    // Since we explicitly asked for HTML only, expect pure HTML
-    let htmlContent = rawContent.trim();
+  let htmlContent = rawContent.trim();
 
-    // Check if Claude still returned JSON despite instructions
-    if (htmlContent.startsWith("```json") || htmlContent.startsWith("{")) {
-      // Extract HTML from JSON as fallback
-      try {
-        let jsonString = htmlContent;
-        if (htmlContent.includes("```json")) {
-          const match = htmlContent.match(/```json\s*([\s\S]*?)\s*```/);
-          jsonString = match ? match[1] : htmlContent;
-        }
-
-        const parsed = JSON.parse(jsonString);
-        htmlContent = parsed.html || htmlContent;
-      } catch {
-        // If parsing fails, use raw content
+  // Check if Claude still returned JSON despite instructions
+  if (htmlContent.startsWith("```json") || htmlContent.startsWith("{")) {
+    try {
+      let jsonString = htmlContent;
+      if (htmlContent.includes("```json")) {
+        const match = htmlContent.match(/```json\s*([\s\S]*?)\s*```/);
+        jsonString = match ? match[1] : htmlContent;
       }
-    }
 
-    return {
-      html: htmlContent,
-      subject: emailContent.subject || "Email Template",
-    };
+      const parsed = JSON.parse(jsonString);
+      htmlContent = parsed.html || htmlContent;
+    } catch {
+      // If parsing fails, use raw content
+    }
   }
+
+  return {
+    html: htmlContent,
+    subject: emailContent.subject || "Email Template",
+    engine: 'CLAUDE'
+  };
 }

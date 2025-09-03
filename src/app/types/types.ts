@@ -19,4 +19,5 @@ export interface TemplateType {
     description: string;
     user: string;
     system: string;
+    designEngine?: 'CLAUDE' | 'GPT4O';
 }

@@ -14,7 +14,6 @@ import {
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import ExternalImage from "@/components/ui/external-image";
-import { promptTypes } from "@/app/utils/promptTypes";
 import { templateUIConfig } from "@/lib/template-config";
 import type {
   Template,
@@ -22,6 +21,20 @@ import type {
   MultiProductInfo,
   TemplateStep,
 } from "@/types/template";
+
+interface DatabasePrompt {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  systemPrompt: string;
+  userPrompt: string;
+  designEngine: "CLAUDE" | "GPT4O";
+  templateType: "SINGLE_PRODUCT" | "MULTI_PRODUCT";
+  isDefault: boolean;
+  version: string;
+  usageCount: number;
+}
 
 export default function TemplaitoApp() {
   const { status } = useSession();
@@ -34,6 +47,9 @@ export default function TemplaitoApp() {
   const [selectedTemplateType, setSelectedTemplateType] = useState<
     number | null
   >(null);
+  const [availablePrompts, setAvailablePrompts] = useState<DatabasePrompt[]>(
+    []
+  );
   const [copied, setCopied] = useState(false);
   const [step, setStep] = useState<TemplateStep>("input");
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
@@ -41,6 +57,25 @@ export default function TemplaitoApp() {
   const [multiProductImageSelections, setMultiProductImageSelections] =
     useState<{ [key: number]: number }>({});
   const previewRef = useRef<HTMLIFrameElement>(null);
+
+  // Fetch available prompts on component mount
+  useEffect(() => {
+    fetchActivePrompts();
+  }, []);
+
+  const fetchActivePrompts = async () => {
+    try {
+      const response = await fetch("/api/prompts/active");
+      if (response.ok) {
+        const data = await response.json();
+        setAvailablePrompts(data.prompts);
+      }
+    } catch (error) {
+      console.error("Failed to fetch prompts:", error);
+    } finally {
+      // Prompts loading complete
+    }
+  };
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +130,7 @@ export default function TemplaitoApp() {
         },
         body: JSON.stringify({
           url: validUrls.length === 1 ? validUrls[0] : validUrls, // Send single URL or array
-          templateType: promptTypes[templateIndex],
+          templateType: availableTemplates[templateIndex],
         }),
       });
 
@@ -117,8 +152,8 @@ export default function TemplaitoApp() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            templateType: promptTypes[templateIndex].name,
-            templateId: templateIndex,
+            templateType: availableTemplates[templateIndex].name,
+            templateId: availableTemplates[templateIndex].id,
             urlCount: validUrls.length,
             wasSuccessful: true,
           }),
@@ -140,8 +175,8 @@ export default function TemplaitoApp() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            templateType: promptTypes[templateIndex].name,
-            templateId: templateIndex,
+            templateType: availableTemplates[templateIndex].name,
+            templateId: availableTemplates[templateIndex].id,
             urlCount: validUrls.length,
             wasSuccessful: false,
           }),
@@ -289,12 +324,17 @@ export default function TemplaitoApp() {
   const validUrls = urls.filter((url) => url.trim() !== "");
   const isMultiProduct = validUrls.length > 1;
   const availableTemplates = isMultiProduct
-    ? promptTypes.filter((_, index) => index === promptTypes.length - 1) // Only Multi-Product Landing
-    : promptTypes.slice(0, -1); // All except Multi-Product Landing
+    ? availablePrompts.filter(
+        (prompt) => prompt.templateType === "MULTI_PRODUCT"
+      ) // Only Multi-Product templates
+    : availablePrompts.filter(
+        (prompt) => prompt.templateType === "SINGLE_PRODUCT"
+      ); // Only Single-Product templates
 
-  const availableUIConfigs = isMultiProduct
-    ? [templateUIConfig[templateUIConfig.length - 1]] // Only Multi-Product Landing UI
-    : templateUIConfig.slice(0, -1); // All except Multi-Product Landing UI
+  // Get UI configs for available templates
+  const availableUIConfigs = availableTemplates.map(
+    (template) => templateUIConfig[template.name] || templateUIConfig.default
+  );
 
   useEffect(() => {
     if (previewRef.current && template && productInfo) {
@@ -585,34 +625,56 @@ export default function TemplaitoApp() {
                 </div>
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                  {availableTemplates.map((templateType, availableIndex) => {
-                    // Map back to original template index
-                    const originalIndex = isMultiProduct
-                      ? promptTypes.length - 1 // Multi-Product Landing is last
-                      : availableIndex; // Regular templates keep their index
-
-                    return (
-                      <button
-                        key={availableIndex}
-                        onClick={() => handleTemplateSelection(originalIndex)}
-                        className={`text-left p-6 rounded-2xl transition-all duration-200 cursor-pointer transform hover:scale-105 hover:shadow-lg ${availableUIConfigs[availableIndex].bgColor} hover:bg-white/80 border-2 border-transparent hover:border-gray-200`}
-                      >
-                        <div className="flex items-center gap-3 mb-4">
-                          <span className="text-3xl">
-                            {availableUIConfigs[availableIndex].icon}
-                          </span>
-                          <span
-                            className={`font-bold text-lg ${availableUIConfigs[availableIndex].textColor}`}
-                          >
-                            {templateType.name}
-                          </span>
-                        </div>
-                        <p className="text-gray-600 text-sm leading-relaxed">
-                          {templateType.description}
+                  {availableTemplates.length > 0 ? (
+                    availableTemplates.map((templateType, availableIndex) => {
+                      return (
+                        <button
+                          key={availableIndex}
+                          onClick={() =>
+                            handleTemplateSelection(availableIndex)
+                          }
+                          className={`text-left p-6 rounded-2xl transition-all duration-200 cursor-pointer transform hover:scale-105 hover:shadow-lg bg-white/60 hover:bg-white/80 border-2 border-transparent hover:border-gray-200`}
+                          style={{
+                            backgroundColor: `${
+                              availableUIConfigs[availableIndex]?.bgColor ||
+                              "#6b7280"
+                            }20`,
+                          }}
+                        >
+                          <div className="mb-4">
+                            <span
+                              className={`font-bold text-lg ${
+                                availableUIConfigs[availableIndex]?.textColor ||
+                                "text-gray-700"
+                              }`}
+                            >
+                              {templateType.name}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 text-sm leading-relaxed">
+                            {templateType.description}
+                          </p>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full text-center py-12">
+                      <div className="text-gray-500 mb-4">
+                        <SparklesIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                          No templates available
+                        </h3>
+                        <p className="text-gray-600">
+                          {isMultiProduct
+                            ? "No multi-product templates found. Try with a single URL."
+                            : "No single-product templates found. Please check your prompts in admin panel."}
                         </p>
-                      </button>
-                    );
-                  })}
+                        <p className="text-sm text-gray-500 mt-2">
+                          Debug: {availablePrompts.length} total prompts loaded
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-center">
@@ -639,7 +701,7 @@ export default function TemplaitoApp() {
                 <h3 className="text-2xl font-bold text-gray-800 mb-2">
                   Creating Your{" "}
                   {selectedTemplateType !== null
-                    ? promptTypes[selectedTemplateType].name
+                    ? availableTemplates[selectedTemplateType]?.name
                     : ""}{" "}
                   Template
                 </h3>
@@ -673,7 +735,7 @@ export default function TemplaitoApp() {
                     <h2 className="text-2xl font-bold mb-2">
                       Your{" "}
                       {selectedTemplateType !== null
-                        ? promptTypes[selectedTemplateType].name
+                        ? availableTemplates[selectedTemplateType]?.name
                         : ""}{" "}
                       Template Is Ready! 🎉
                     </h2>
@@ -705,17 +767,28 @@ export default function TemplaitoApp() {
                 {/* Template Header */}
                 <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">
-                      {selectedTemplateType !== null
-                        ? isMultiProduct
-                          ? templateUIConfig[templateUIConfig.length - 1].icon // Multi-Product Landing icon
-                          : templateUIConfig[selectedTemplateType].icon // Regular template icon
-                        : ""}
-                    </span>
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      {selectedTemplateType !== null &&
+                      availableTemplates[selectedTemplateType] ? (
+                        (() => {
+                          const selectedTemplate =
+                            availableTemplates[selectedTemplateType];
+                          const config =
+                            templateUIConfig[selectedTemplate.name] ||
+                            templateUIConfig.default;
+                          const IconComponent = config.icon;
+                          return IconComponent ? (
+                            <IconComponent className="w-6 h-6 text-gray-600" />
+                          ) : null;
+                        })()
+                      ) : (
+                        <SparklesIcon className="w-6 h-6 text-gray-400" />
+                      )}
+                    </div>
                     <div>
                       <h3 className="font-semibold text-gray-800">
                         {selectedTemplateType !== null
-                          ? promptTypes[selectedTemplateType].name
+                          ? availableTemplates[selectedTemplateType]?.name
                           : ""}
                       </h3>
                       <p className="text-sm text-gray-600">
@@ -738,13 +811,16 @@ export default function TemplaitoApp() {
                       className={`inline-flex cursor-pointer items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
                         copied
                           ? "bg-green-100 text-green-700 border-2 border-green-200"
-                          : selectedTemplateType !== null
-                          ? `bg-gradient-to-r ${
-                              isMultiProduct
-                                ? templateUIConfig[templateUIConfig.length - 1]
-                                    .color // Multi-Product Landing color
-                                : templateUIConfig[selectedTemplateType].color // Regular template color
-                            } text-white hover:shadow-lg transform hover:scale-105`
+                          : selectedTemplateType !== null &&
+                            availableTemplates[selectedTemplateType]
+                          ? `bg-gradient-to-r ${(() => {
+                              const selectedTemplate =
+                                availableTemplates[selectedTemplateType];
+                              const config =
+                                templateUIConfig[selectedTemplate.name] ||
+                                templateUIConfig.default;
+                              return config.color;
+                            })()} text-white hover:shadow-lg transform hover:scale-105`
                           : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-lg transform hover:scale-105"
                       }`}
                     >

@@ -146,12 +146,7 @@ export default function LandingPage() {
 
             countdownInterval = setInterval(() => {
               timeLeft--;
-              console.log(
-                "Countdown:",
-                timeLeft,
-                "Progress:",
-                ((20 - timeLeft) / 20) * 100
-              );
+
               setCountdown(timeLeft);
               setRestartProgress(((20 - timeLeft) / 20) * 100);
 

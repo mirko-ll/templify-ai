@@ -1,7 +1,25 @@
+// @ts-ignore
 import { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "./prisma"
+import { getServerSession } from "next-auth/next"
+
+// Extended session type
+export interface ExtendedSession {
+  user: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+    isAdmin?: boolean;
+  }
+}
+
+// Helper to get typed session
+export const getTypedSession = async (): Promise<ExtendedSession | null> => {
+  return await getServerSession(authOptions) as ExtendedSession | null;
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -12,15 +30,24 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    // @ts-ignore
     session: async ({ session, token }) => {
       if (session?.user) {
-        session.user.id = token.sub!
+        (session.user as any).id = token.sub!;
+        (session.user as any).isAdmin = token.isAdmin as boolean;
       }
       return session
     },
+    // @ts-ignore
     jwt: async ({ user, token }) => {
       if (user) {
-        token.uid = user.id
+        (token as any).uid = user.id
+        // Fetch user's admin status from database
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { isAdmin: true }
+        })
+        ;(token as any).isAdmin = dbUser?.isAdmin || false
       }
       return token
     },

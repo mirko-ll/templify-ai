@@ -55,7 +55,7 @@ export default function ProfilePage() {
   }, [status]);
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if ((session as any)?.user?.id) {
       fetchProfile();
     }
   }, [session]);
@@ -107,11 +107,17 @@ export default function ProfilePage() {
       if (response.ok) {
         showToastNotification("success", "Profile updated successfully! 🎉");
       } else {
-        showToastNotification("error", "Error updating profile. Please try again.");
+        showToastNotification(
+          "error",
+          "Error updating profile. Please try again."
+        );
       }
     } catch (error) {
       console.error("Error saving profile:", error);
-      showToastNotification("error", "Error updating profile. Please try again.");
+      showToastNotification(
+        "error",
+        "Error updating profile. Please try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -121,11 +127,14 @@ export default function ProfilePage() {
     setProfileData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const showToastNotification = (type: "success" | "error", message: string) => {
+  const showToastNotification = (
+    type: "success" | "error",
+    message: string
+  ) => {
     setToastType(type);
     setMessage(message);
     setShowToast(true);
-    
+
     // Auto hide toast after 4 seconds
     setTimeout(() => {
       setShowToast(false);
@@ -149,15 +158,21 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-8">
       {/* Toast Notification */}
       {showToast && (
-        <div className={`fixed top-4 right-4 z-50 transform transition-all duration-300 ${
-          showToast ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
-        }`}>
-          <div className={`flex items-center space-x-3 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-lg border-2 ${
-            toastType === 'success' 
-              ? 'bg-green-50/90 border-green-200 text-green-800' 
-              : 'bg-red-50/90 border-red-200 text-red-800'
-          }`}>
-            {toastType === 'success' ? (
+        <div
+          className={`fixed top-4 right-4 z-50 transform transition-all duration-300 ${
+            showToast
+              ? "translate-x-0 opacity-100"
+              : "translate-x-full opacity-0"
+          }`}
+        >
+          <div
+            className={`flex items-center space-x-3 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-lg border-2 ${
+              toastType === "success"
+                ? "bg-green-50/90 border-green-200 text-green-800"
+                : "bg-red-50/90 border-red-200 text-red-800"
+            }`}
+          >
+            {toastType === "success" ? (
               <CheckCircleIcon className="w-6 h-6 text-green-600" />
             ) : (
               <XMarkIcon className="w-6 h-6 text-red-600" />
@@ -183,7 +198,6 @@ export default function ProfilePage() {
             Manage your personal and company information
           </p>
         </div>
-
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Personal Information */}

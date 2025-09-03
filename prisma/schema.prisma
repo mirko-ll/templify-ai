@@ -43,34 +43,37 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
+  isAdmin       Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  
-  accounts         Account[]
-  sessions         Session[]
-  profile          Profile?
-  templateUsage    TemplateUsage[]
+
+  accounts            Account[]
+  sessions            Session[]
+  profile             Profile?
+  templateUsage       TemplateUsage[]
+  createdPrompts      Prompt[]
+  templateGenerations TemplateGeneration[]
 }
 
 model Profile {
-  id              String  @id @default(cuid())
-  userId          String  @unique
-  phoneNumber     String?
-  address         String?
-  city            String?
-  country         String?
-  postalCode      String?
-  
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  phoneNumber String?
+  address     String?
+  city        String?
+  country     String?
+  postalCode  String?
+
   // Company details
   companyName     String?
   companyWebsite  String?
   companyIndustry String?
   jobTitle        String?
   companySize     String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -83,30 +86,30 @@ model VerificationToken {
 }
 
 model TemplateUsage {
-  id        String   @id @default(cuid())
-  userId    String?  // Optional - can track anonymous users too
-  
+  id     String  @id @default(cuid())
+  userId String? // Optional - can track anonymous users too
+
   // Core Template Data
-  templateType     String   // Professional, Promotional, etc.
-  templateId       Int      // Template index (0-8)
-  
+  templateType String // Professional, Promotional, etc.
+  templateId   String // Template index (0-8)
+
   // URL Data
-  urlCount         Int      // Number of URLs processed (1 or multiple)
-  
+  urlCount Int // Number of URLs processed (1 or multiple)
+
   // User Context (from profile if available)
-  userIndustry     String?  // User's company industry
-  userCompanySize  String?  // Company size segment
-  userCountry      String?  // Geographic segment
-  
+  userIndustry    String? // User's company industry
+  userCompanySize String? // Company size segment
+  userCountry     String? // Geographic segment
+
   // Success/Failure
-  wasSuccessful    Boolean  // Did the generation succeed
-  
+  wasSuccessful Boolean // Did the generation succeed
+
   // Timestamp
-  createdAt        DateTime @default(now())
-  
+  createdAt DateTime @default(now())
+
   // Relations
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+
   @@index([userId])
   @@index([templateType])
   @@index([templateId])
@@ -116,3 +119,89 @@ model TemplateUsage {
   @@index([wasSuccessful])
 }
 
+// Prompt Management Models
+model Prompt {
+  id          String  @id @default(cuid())
+  name        String // "Professional Email Template"
+  description String? // Brief description of template
+  color       String  @default("#6366f1") // Color for template selection boxes
+
+  // Core prompt content
+  systemPrompt String @db.Text
+  userPrompt   String @db.Text
+
+  // AI Configuration
+  designEngine DesignEngine @default(CLAUDE) // CLAUDE or GPT4O
+
+  // Template Type
+  templateType TemplateType @default(SINGLE_PRODUCT) // SINGLE_PRODUCT or MULTI_PRODUCT
+
+  // Versioning & Management
+  version   String       @default("1.0.0")
+  status    PromptStatus @default(DRAFT) // DRAFT, ACTIVE, ARCHIVED
+  isDefault Boolean      @default(false)
+
+  // Metadata
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastTestedAt DateTime?
+  testResults  Json? // Store test results and metrics
+
+  // Usage Analytics
+  usageCount  Int    @default(0)
+  successRate Float? // Success rate from tests
+
+  // Relations
+  creator             User                 @relation(fields: [createdBy], references: [id])
+  templateGenerations TemplateGeneration[]
+
+  @@index([status])
+  @@index([createdBy])
+  @@index([isDefault])
+}
+
+model TemplateGeneration {
+  id       String  @id @default(cuid())
+  promptId String
+  userId   String?
+
+  // Input data
+  inputUrl    String
+  productInfo Json // Scraped product info
+
+  // Output data  
+  generatedHtml String  @db.Text
+  subject       String?
+
+  // Performance metrics
+  generationTime Int // milliseconds
+  wasSuccessful  Boolean
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  prompt Prompt @relation(fields: [promptId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([promptId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum DesignEngine {
+  CLAUDE
+  GPT4O
+}
+
+enum PromptStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TemplateType {
+  SINGLE_PRODUCT
+  MULTI_PRODUCT
+}

@@ -26,8 +26,12 @@ export async function generateMultiProductTemplate(
       )
       .join(", ");
 
-    // Step 1: OpenAI generates the email content/copy
-    const contentResponse = await openai.chat.completions.create({
+    // Step 1: Generate email content/copy using specified AI engine
+    let emailContent;
+    
+    if (templateType.designEngine === 'GPT4O') {
+      // Use GPT-4O for both content and design
+      const contentResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -75,13 +79,102 @@ export async function generateMultiProductTemplate(
         },
       ],
       response_format: { type: "json_object" },
-    });
+      });
 
-    const emailContent = JSON.parse(
-      contentResponse.choices[0].message.content || "{}"
-    );
+      emailContent = JSON.parse(
+        contentResponse.choices[0].message.content || "{}"
+      );
+    } else {
+      // Use Claude for content generation
+      const contentResponse = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [
+          {
+            role: "user",
+            content: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.
+            
+            ${templateType.user
+              .replace(/\{\{product_names\}\}/g, productNames)
+              .replace(/\{\{product_links\}\}/g, productLinks)
+              .replace(/\{\{product_images\}\}/g, productImages)
+              .replace(/\{\{product_prices\}\}/g, productPrices)
+              .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
+                      
+            Products details:
+            ${multiProductInfo.products
+              .map(
+                (product, index) => `
+            Product ${index + 1}:
+            - Title: ${product.title}
+            - Description: ${product.description}
+            - Regular Price: ${product.regularPrice}
+            - Sale Price: ${product.salePrice || "N/A"}
+            - Discount: ${product.discount || "N/A"}
+            - Images: ${product.images.join(", ")}
+            - Best Image: ${product.bestImageUrl}
+            `
+              )
+              .join("")}
+                      
+            Generate email content in ${multiProductInfo.language} language.
+                      
+            Please return a JSON object with:
+            {
+                "subject": "Email subject line",
+                "headline": "Main headline", 
+                "bodyText": "Main body text/description",
+                "ctaText": "Call to action button text",
+                "preheader": "Email preheader text"
+            }`
+          }
+        ]
+      });
 
-    // Step 2: Claude generates the HTML design using the content from OpenAI
+      let rawContent = contentResponse.content[0].type === "text" ? contentResponse.content[0].text : "{}";
+      
+      // Handle Claude returning JSON wrapped in markdown code blocks
+      if (rawContent.includes("```json")) {
+        const match = rawContent.match(/```json\s*([\s\S]*?)\s*```/);
+        rawContent = match ? match[1] : rawContent;
+      }
+      
+      emailContent = JSON.parse(rawContent);
+    }
+
+    // Step 2: Generate HTML design using the specified AI engine
+    if (templateType.designEngine === 'GPT4O') {
+      // Use GPT-4O for HTML generation
+      const designResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert HTML email developer. Create responsive, cross-client compatible email templates."
+          },
+          {
+            role: "user",
+            content: `Create a multi-product landing page email template using this content:
+
+CRITICAL: Return ONLY pure HTML code. Start with <!DOCTYPE html> and end with </html>
+
+Content: ${JSON.stringify(emailContent)}
+Products: ${JSON.stringify(multiProductInfo.products)}
+URLs: ${JSON.stringify(urls)}
+
+${templateType.system}
+
+Create a responsive email template that showcases all products effectively with modern design.`
+          }
+        ]
+      });
+
+      return {
+        html: designResponse.choices[0].message.content || "",
+        subject: emailContent.subject || "Multi-Product Offer",
+      };
+    } else {
+      // Use Claude for HTML generation
     const designResponse = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
@@ -177,4 +270,5 @@ REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Fol
       html: htmlContent,
       subject: emailContent.subject || "Multi-Product Email Template",
     };
+    }
 } 

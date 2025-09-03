@@ -11,11 +11,11 @@ export async function POST(request: NextRequest) {
 
     // Get user profile context if available
     let userProfile = null
-    if (session?.user?.email) {
+    if (((session as any)?.user as any)?.email) {
       try {
         const { prisma } = await import("@/lib/prisma")
         const user = await prisma.user.findUnique({
-          where: { email: session.user.email },
+          where: { email: ((session as any).user as any).email },
           include: { profile: true },
         })
         userProfile = user?.profile
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Track template usage
     await trackTemplateUsage({
-      userId: session?.user?.id,
+      userId: ((session as any)?.user as any)?.id,
       templateType: data.templateType,
       templateId: data.templateId,
       urlCount: data.urlCount,
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions)
 
     // Only allow authenticated users to view analytics (you might want admin-only access)
-    if (!session?.user) {
+    if (!(session as any)?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

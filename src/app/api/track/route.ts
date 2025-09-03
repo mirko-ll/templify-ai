@@ -9,11 +9,11 @@ export async function POST(request: NextRequest) {
     const data = await request.json()
 
     // Get user profile context if user is logged in
-    const userProfile = await getUserProfileContext(session?.user?.id)
+    const userProfile = await getUserProfileContext(((session as any)?.user as any)?.id)
 
     // Track template usage
     await trackTemplateUsage({
-      userId: session?.user?.id,
+      userId: ((session as any)?.user as any)?.id,
       templateType: data.templateType,
       templateId: data.templateId,
       urlCount: data.urlCount,

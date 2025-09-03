@@ -1,45 +1,54 @@
-"use client"
+"use client";
 
-import { useSession, signOut } from "next-auth/react"
-import { Fragment, useState, useEffect } from "react"
-import { Menu, Transition } from "@headlessui/react"
-import { ChevronDownIcon, UserIcon, Cog6ToothIcon, ArrowRightOnRectangleIcon, SparklesIcon } from "@heroicons/react/24/outline"
-import Link from "next/link"
-import Image from "next/image"
+import { useSession, signOut } from "next-auth/react";
+import { Fragment, useState, useEffect } from "react";
+import { Menu, Transition } from "@headlessui/react";
+import {
+  ChevronDownIcon,
+  UserIcon,
+  Cog6ToothIcon,
+  ArrowRightOnRectangleIcon,
+  SparklesIcon,
+  CommandLineIcon,
+} from "@heroicons/react/24/outline";
+import Link from "next/link";
+import Image from "next/image";
 
 export default function Header() {
-  const { data: session, status } = useSession()
-  const [isScrolled, setIsScrolled] = useState(false)
+  const { data: session, status } = useSession();
+  const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10)
-    }
+      setIsScrolled(window.scrollY > 10);
+    };
 
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const handleSignOut = async () => {
     try {
-      await signOut({ 
+      await signOut({
         callbackUrl: "/auth/signin",
-        redirect: true 
-      })
+        redirect: true,
+      });
     } catch (error) {
-      console.error('Sign out error:', error)
+      console.error("Sign out error:", error);
       // Force redirect even if sign out fails
-      window.location.href = "/auth/signin"
+      window.location.href = "/auth/signin";
     }
-  }
+  };
 
   if (status === "loading") {
     return (
-      <header className={`sticky top-0 z-50 transition-all duration-300 ${
-        isScrolled 
-          ? 'bg-white/95 backdrop-blur-lg border-b border-gray-200/60 shadow-lg' 
-          : 'bg-white border-b border-gray-100/30'
-      }`}>
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          isScrolled
+            ? "bg-white/95 backdrop-blur-lg border-b border-gray-200/60 shadow-lg"
+            : "bg-white border-b border-gray-100/30"
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-18">
             <div className="flex items-center">
@@ -56,22 +65,26 @@ export default function Header() {
           </div>
         </div>
       </header>
-    )
+    );
   }
 
   return (
-    <header className={`sticky top-0 z-50 transition-all duration-300 ${
-      isScrolled 
-        ? 'bg-white/95 backdrop-blur-lg border-b border-gray-200/60 shadow-lg' 
-        : 'bg-white border-b border-gray-100/30'
-    }`}>
+    <header
+      className={`sticky top-0 z-50 transition-all duration-300 ${
+        isScrolled
+          ? "bg-white/95 backdrop-blur-lg border-b border-gray-200/60 shadow-lg"
+          : "bg-white border-b border-gray-100/30"
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-18">
           {/* Logo - Matching home page design */}
           <Link href="/" className="flex items-center group">
-            <div className={`w-12 h-12 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-all duration-300 transform group-hover:scale-105 ${
-              isScrolled ? 'shadow-lg' : 'shadow-xl'
-            }`}>
+            <div
+              className={`w-12 h-12 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-all duration-300 transform group-hover:scale-105 ${
+                isScrolled ? "shadow-lg" : "shadow-xl"
+              }`}
+            >
               <SparklesIcon className="w-6 h-6 text-white" />
             </div>
             <span className="ml-3 text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent group-hover:from-indigo-700 group-hover:via-purple-700 group-hover:to-pink-700 transition-all duration-300">
@@ -84,15 +97,15 @@ export default function Header() {
             {/* Navigation Links (when logged in) */}
             {session?.user && (
               <nav className="hidden md:flex items-center space-x-8">
-                <Link 
-                  href="/app" 
+                <Link
+                  href="/app"
                   className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
                 >
                   Create Templates
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300"></span>
                 </Link>
-                <Link 
-                  href="/profile" 
+                <Link
+                  href="/profile"
                   className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
                 >
                   Profile
@@ -120,8 +133,12 @@ export default function Header() {
                       </div>
                     )}
                     <div className="hidden lg:block text-left">
-                      <p className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors duration-200">{session.user.name}</p>
-                      <p className="text-xs text-gray-500 group-hover:text-gray-600 transition-colors duration-200">{session.user.email}</p>
+                      <p className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors duration-200">
+                        {session.user.name}
+                      </p>
+                      <p className="text-xs text-gray-500 group-hover:text-gray-600 transition-colors duration-200">
+                        {session.user.email}
+                      </p>
                     </div>
                     <ChevronDownIcon className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-all duration-200 group-hover:rotate-180" />
                   </Menu.Button>
@@ -155,8 +172,12 @@ export default function Header() {
                             </div>
                           )}
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">{session.user.name}</p>
-                            <p className="text-xs text-gray-500">{session.user.email}</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {session.user.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {session.user.email}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -167,7 +188,9 @@ export default function Header() {
                           <Link
                             href="/profile"
                             className={`${
-                              active ? "bg-gradient-to-r from-indigo-50 to-purple-50" : ""
+                              active
+                                ? "bg-gradient-to-r from-indigo-50 to-purple-50"
+                                : ""
                             } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                           >
                             <div className="w-8 h-8 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-indigo-200 group-hover:to-purple-200 transition-all duration-200">
@@ -175,11 +198,45 @@ export default function Header() {
                             </div>
                             <div>
                               <p className="font-medium">Profile Settings</p>
-                              <p className="text-xs text-gray-500">Manage your account</p>
+                              <p className="text-xs text-gray-500">
+                                Manage your account
+                              </p>
                             </div>
                           </Link>
                         )}
                       </Menu.Item>
+
+                      {/* Admin Menu - Only show for admin users */}
+                      {((session as any)?.user as any)?.isAdmin && (
+                        <>
+                          <div className="border-t border-gray-100/60 my-1"></div>
+                          <Menu.Item>
+                            {({ active }) => (
+                              <Link
+                                href="/admin/prompts"
+                                className={`${
+                                  active
+                                    ? "bg-gradient-to-r from-purple-50 to-pink-50"
+                                    : ""
+                                } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
+                              >
+                                <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-pink-200 transition-all duration-200">
+                                  <CommandLineIcon className="h-4 w-4 text-purple-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium">
+                                    Prompt Generator
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Admin panel & tools
+                                  </p>
+                                </div>
+                              </Link>
+                            )}
+                          </Menu.Item>
+                          <div className="border-t border-gray-100/60 my-1"></div>
+                        </>
+                      )}
 
                       <Menu.Item>
                         {({ active }) => (
@@ -194,7 +251,9 @@ export default function Header() {
                             </div>
                             <div>
                               <p className="font-medium">Sign out</p>
-                              <p className="text-xs text-gray-500">See you soon!</p>
+                              <p className="text-xs text-gray-500">
+                                See you soon!
+                              </p>
                             </div>
                           </button>
                         )}
@@ -216,5 +275,5 @@ export default function Header() {
         </div>
       </div>
     </header>
-  )
+  );
 }

@@ -3,7 +3,7 @@ import { prisma } from "./prisma"
 export interface TemplateUsageData {
   userId?: string
   templateType: string
-  templateId: number
+  templateId: string
   urlCount: number
   wasSuccessful: boolean
   userIndustry?: string
@@ -34,13 +34,13 @@ export async function trackTemplateUsage(data: TemplateUsageData) {
 // Helper function to get user profile context
 export async function getUserProfileContext(userId?: string) {
   if (!userId) return null
-  
+
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },
     })
-    
+
     return user?.profile ? {
       industry: user.profile.companyIndustry,
       companySize: user.profile.companySize,
