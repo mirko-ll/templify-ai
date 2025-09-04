@@ -456,10 +456,15 @@ async function generateWithGPT4O(
   productUrl: string,
   templateType: any
 ) {
-  console.log("Generating with GPT4O");
-  console.log(productInfo);
+  console.log(emailContent);
+
   const designResponse = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-4o-2024-11-20",         // <- pin snapshot
+    temperature: 0.2,                   // a touch of creativity for design
+    top_p: 1,
+    presence_penalty: 0,
+    frequency_penalty: 0,
+    seed: 42,
     messages: [
       {
         role: "system",
@@ -497,7 +502,9 @@ Email Content to Use:
 - Body: ${emailContent.bodyText}
 - CTA Text: ${emailContent.ctaText}
 
-Product Details:
+Product Details (USE THESE TO SWITCH VARIABLES IN THE TEMPLATE DO NOT USE IF WE DO NOT HAVE VARIABLES FOR IT):
+Example: {{product_image}} not appearing in the template means we do not have a product image so do not use it in the template.
+
 - Name: ${productInfo.title}
 - Description: ${productInfo.description}
 - Image: ${productInfo.bestImageUrl}
@@ -508,7 +515,7 @@ Product Details:
 
 CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
 
-REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above.`
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`
       }
     ],
     max_tokens: 4000,
@@ -568,7 +575,8 @@ Email Content to Use:
 - Body: ${emailContent.bodyText}
 - CTA Text: ${emailContent.ctaText}
 
-Product Details:
+Product Details (USE THESE TO SWITCH VARIABLES IN THE TEMPLATE DO NOT USE IF WE DO NOT HAVE VARIABLES FOR IT):
+Example: {{product_image}} not appearing in the template means we do not have a product image so do not use it in the template.
 - Name: ${productInfo.title}
 - Description: ${productInfo.description}
 - Image: ${productInfo.bestImageUrl}
@@ -579,7 +587,7 @@ Product Details:
 
 CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
 
-REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Follow ALL 12 email requirements above AND the specific template design instructions.`,
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`,
       },
     ],
   });
