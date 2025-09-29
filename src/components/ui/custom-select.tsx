@@ -22,6 +22,7 @@ interface CustomSelectProps {
   hoverFrom?: string;
   hoverTo?: string;
   disabled?: boolean;
+  dropdownPlacement?: "above" | "below";
 }
 
 export default function CustomSelect({
@@ -36,13 +37,22 @@ export default function CustomSelect({
   textColor = "blue-800",
   hoverFrom = "blue-100", 
   hoverTo = "indigo-100",
-  disabled = false
+  disabled = false,
+  dropdownPlacement = "below"
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const selectedOption = options.find(option => option.value === value);
+
+  const dropdownPositionClass = dropdownPlacement === "above"
+    ? "bottom-full mb-2"
+    : "top-full mt-2";
+
+  const dropdownAnimationClass = dropdownPlacement === "above"
+    ? "animate-in slide-in-from-bottom-2"
+    : "animate-in slide-in-from-top-2";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -88,8 +98,10 @@ export default function CustomSelect({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-2 min-w-max">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-200 animate-in slide-in-from-top-2 min-w-full">
+        <div className={`absolute left-0 right-0 z-50 min-w-max ${dropdownPositionClass}`}>
+
+          <div className={`bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-200 ${dropdownAnimationClass} min-w-full`}>
+
             <div className="max-h-64 overflow-y-auto custom-scrollbar">
               {options.map((option, index) => (
                 <button

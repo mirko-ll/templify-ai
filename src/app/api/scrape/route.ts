@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
@@ -17,12 +18,102 @@ const anthropic = new Anthropic({
   apiKey: process.env.CLOUD_API_KEY,
 });
 
+async function translateTextToEnglish(text: string | null | undefined) {
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return text ?? "";
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-2024-11-20",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Translate the provided text to English. Return only the translated text with no additional commentary."
+        },
+        {
+          role: "user",
+          content: trimmed,
+        },
+      ],
+    });
+
+    const output = completion.choices[0]?.message?.content?.trim();
+    return output && output.length > 0 ? output : text ?? "";
+  } catch (error) {
+    console.error("Failed to translate text to English", error);
+    return text ?? "";
+  }
+}
+
+async function translateHtmlToEnglish(html: string) {
+  const trimmed = html?.trim();
+  if (!trimmed) {
+    return html;
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-2024-11-20",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional email translator. Translate the provided HTML email into English.
+Important rules:
+1. Preserve every HTML tag and attribute exactly as in the original markup.
+2. Do NOT translate or modify template variables (e.g. {{variable}}, {unsubscribe}, {subtag:name}).
+3. Keep all URLs untouched.
+4. Translate only visible copy/content.
+5. Maintain the original tone and style.
+6. Return ONLY the translated HTML markup with no additional commentary.`
+        },
+        {
+          role: "user",
+          content: trimmed,
+        },
+      ],
+    });
+
+    const output = completion.choices[0]?.message?.content?.trim();
+    return output && output.length > 0 ? output : html;
+  } catch (error) {
+    console.error("Failed to translate HTML to English", error);
+    return html;
+  }
+}
+
+async function buildPreviewTemplate(template: { html: string; subject?: string | null; engine?: string | null }) {
+  if (!template) {
+    return null;
+  }
+
+  const subject = await translateTextToEnglish(template.subject ?? "");
+  const html = await translateHtmlToEnglish(template.html ?? "");
+
+  return {
+    ...template,
+    subject,
+    html,
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const { url, templateType, isTest } = await request.json();
+    const body = await request.json();
 
-    if (!url) {
+    const { url, templateType, isTest, countryUrls } = body ?? {};
+
+    const hasCountryPayload =
+      countryUrls &&
+      typeof countryUrls === "object" &&
+      !Array.isArray(countryUrls);
+
+    if (!hasCountryPayload && !url) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
@@ -45,24 +136,201 @@ export async function POST(request: Request) {
       dbPrompt = await prisma.prompt.findFirst({
         where: {
           name: templateType.name,
-          status: 'ACTIVE',
+          status: "ACTIVE",
         },
       });
 
       // If no database prompt found, fall back to the provided templateType
-      effectiveTemplate = dbPrompt ? {
-        name: dbPrompt.name,
-        description: dbPrompt.description || templateType.description,
-        system: dbPrompt.systemPrompt,
-        user: dbPrompt.userPrompt,
-        designEngine: dbPrompt.designEngine,
-      } : templateType;
+      effectiveTemplate = dbPrompt
+        ? {
+          name: dbPrompt.name,
+          description: dbPrompt.description || templateType.description,
+          system: dbPrompt.systemPrompt,
+          user: dbPrompt.userPrompt,
+          designEngine: dbPrompt.designEngine,
+        }
+        : templateType;
     }
 
-    // Handle multiple URLs for Multi-Product Landing
-    const isMultiProduct = Array.isArray(url);
-    const startTime = Date.now();
+    let startTime = Date.now();
     let wasSuccessful = false;
+    const userId = ((session as any)?.user as any)?.id as string | undefined;
+
+    if (hasCountryPayload) {
+      const entries = Object.entries(countryUrls as Record<string, unknown>)
+        .map(([code, raw]) => {
+          const arr = Array.isArray(raw) ? raw : [raw];
+          const cleaned = arr
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter((value) => value.length > 0);
+          return { countryCode: code, urls: cleaned };
+        })
+        .filter((entry) => entry.urls.length > 0);
+
+      if (entries.length === 0) {
+        return NextResponse.json(
+          { error: "At least one product URL is required" },
+          { status: 400 }
+        );
+      }
+
+      const hasMultiProductCountry = entries.some(
+        (entry) => entry.urls.length > 1
+      );
+      const primaryEntry =
+        entries.find((entry) => entry.urls.length > 1) ?? entries[0];
+
+      const countryResults: Record<
+        string,
+        {
+          urls: string[];
+          productInfo?: ProductInfo;
+          multiProductInfo?: MultiProductInfo;
+          type: "SINGLE" | "MULTI";
+        }
+      > = {};
+
+      await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.urls.length > 1) {
+            const multiProductInfo = await processMultipleUrls(
+              entry.urls,
+              effectiveTemplate
+            );
+            countryResults[entry.countryCode] = {
+              urls: entry.urls,
+              multiProductInfo,
+              type: "MULTI",
+            };
+          } else {
+            const productInfo = await processSingleUrl(
+              entry.urls[0],
+              effectiveTemplate
+            );
+            countryResults[entry.countryCode] = {
+              urls: entry.urls,
+              productInfo,
+              type: "SINGLE",
+            };
+          }
+        })
+      );
+
+      const primaryResult = countryResults[primaryEntry.countryCode];
+
+      if (!primaryResult) {
+        throw new Error("Unable to resolve primary country data.");
+      }
+      const urlsForRequest = hasMultiProductCountry
+        ? primaryEntry.urls
+        : [primaryEntry.urls[0]];
+
+      try {
+        let emailTemplate;
+        let productInfoForResponse: any;
+
+        if (hasMultiProductCountry) {
+          const multiProductInfo = primaryResult?.multiProductInfo;
+          if (!multiProductInfo) {
+            throw new Error("Missing multi-product data for primary country");
+          }
+          emailTemplate = await generateMultiProductTemplate(
+            multiProductInfo,
+            primaryEntry.urls,
+            effectiveTemplate,
+            openai,
+            anthropic
+          );
+          productInfoForResponse = multiProductInfo;
+        } else {
+          const productInfo = primaryResult?.productInfo as ProductInfo;
+          if (!productInfo) {
+            throw new Error("Missing product data for primary country");
+          }
+          emailTemplate = await generateEmailTemplate(
+            productInfo,
+            primaryEntry.urls[0],
+            effectiveTemplate
+          );
+          productInfoForResponse = productInfo;
+        }
+
+        wasSuccessful = true;
+        const generationTime = Date.now() - startTime;
+
+        if (dbPrompt && userId) {
+          await prisma.templateGeneration.create({
+            data: {
+              promptId: dbPrompt.id,
+              userId,
+              inputUrl: urlsForRequest[0],
+              productInfo: productInfoForResponse as any,
+              generatedHtml: emailTemplate.html,
+              subject: emailTemplate.subject,
+              generationTime,
+              wasSuccessful,
+            },
+          });
+
+          await prisma.prompt.update({
+            where: { id: dbPrompt.id },
+            data: {
+              usageCount: {
+                increment: 1,
+              },
+            },
+          });
+        }
+
+        const previewTemplate = await buildPreviewTemplate(emailTemplate);
+
+        return NextResponse.json({
+          productInfo: productInfoForResponse,
+          emailTemplate,
+          previewTemplate: previewTemplate ?? emailTemplate,
+          baseCountry: primaryEntry.countryCode,
+          countryResults: entries.reduce<Record<string, unknown>>(
+            (acc, entry) => {
+              const result = countryResults[entry.countryCode];
+              acc[entry.countryCode] = {
+                urls: entry.urls,
+                type: result.type,
+                ...(result.type === "MULTI"
+                  ? { multiProductInfo: result.multiProductInfo }
+                  : { productInfo: result.productInfo }),
+              };
+              return acc;
+            },
+            {}
+          ),
+        });
+      } catch (error) {
+        const generationTime = Date.now() - startTime;
+
+        if (dbPrompt && userId) {
+          await prisma.templateGeneration.create({
+            data: {
+              promptId: dbPrompt.id,
+              userId,
+              inputUrl: urlsForRequest[0],
+              productInfo: Prisma.JsonNull,
+              generatedHtml: "",
+              errorMessage:
+                error instanceof Error ? error.message : "Unknown error",
+              generationTime,
+              wasSuccessful: false,
+            },
+          });
+        }
+
+        throw error;
+      }
+    }
+
+    startTime = Date.now();
+    wasSuccessful = false;
+
+    const isMultiProduct = Array.isArray(url);
 
     try {
       if (isMultiProduct) {
@@ -106,9 +374,12 @@ export async function POST(request: Request) {
           });
         }
 
+        const previewTemplate = await buildPreviewTemplate(template);
+
         return NextResponse.json({
           productInfo: productInfos,
           emailTemplate: template,
+          previewTemplate: previewTemplate ?? template,
         });
       } else {
         // Process single URL using effective template (database or fallback)
@@ -137,7 +408,6 @@ export async function POST(request: Request) {
             },
           });
 
-          // Update prompt usage count
           await prisma.prompt.update({
             where: { id: dbPrompt.id },
             data: {
@@ -148,45 +418,50 @@ export async function POST(request: Request) {
           });
         }
 
+        console.log(productInfo, template);
+
+        const previewTemplate = await buildPreviewTemplate(template);
+
         return NextResponse.json({
           productInfo,
           emailTemplate: template,
-          promptUsed: dbPrompt ? {
-            id: dbPrompt.id,
-            name: dbPrompt.name,
-            designEngine: dbPrompt.designEngine,
-          } : null,
-          generationTime,
+          previewTemplate: previewTemplate ?? template,
         });
       }
-    } catch (error: any) {
-      // Log failed generation if we used a database prompt
+    } catch (error) {
+      console.error(error);
+
+      const generationTime = Date.now() - startTime;
+
       if (dbPrompt && ((session as any)?.user as any)?.id) {
         await prisma.templateGeneration.create({
           data: {
             promptId: dbPrompt.id,
             userId: ((session as any).user as any).id,
-            inputUrl: url,
-            productInfo: {} as any,
+            inputUrl: Array.isArray(url) ? url[0] : url,
+            productInfo: Prisma.JsonNull,
             generatedHtml: "",
-            subject: "",
-            generationTime: Date.now() - startTime,
-            wasSuccessful: false,
-            errorMessage: error.message,
+            errorMessage: error instanceof Error ? error.message : "Unknown error",
+            generationTime,
+            wasSuccessful,
           },
         });
       }
 
-      throw error;
+      return NextResponse.json(
+        { error: "Failed to process URL(s). Please try different product URLs." },
+        { status: 500 }
+      );
     }
   } catch (error) {
-    console.error("Error processing URL:", error);
+    console.error("Scrape failed:", error);
     return NextResponse.json(
-      { error: "Failed to process URL" },
+      { error: "Failed to process product" },
       { status: 500 }
     );
   }
 }
+
 
 async function processSingleUrl(
   url: string,

@@ -53,6 +53,7 @@ model User {
   templateUsage       TemplateUsage[]
   createdPrompts      Prompt[]
   templateGenerations TemplateGeneration[]
+  clients            Client[]
 }
 
 model Profile {
@@ -190,6 +191,105 @@ model TemplateGeneration {
   @@index([createdAt])
 }
 
+model Country {
+  code          String                 @id
+  name          String
+  isActive      Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  clientConfigs   ClientCountryConfig[]
+  campaignTargets CampaignCountry[]
+}
+
+model Client {
+  id             String                  @id @default(cuid())
+  userId         String
+  name           String
+  description    String?
+  industry       String?
+  website        String?
+  notes          String?
+  isArchived     Boolean                 @default(false)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  owner          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrations   ClientIntegration[]
+  countryConfigs ClientCountryConfig[]
+  campaigns      Campaign[]
+
+  @@index([userId])
+  @@index([isArchived])
+}
+
+model ClientIntegration {
+  id                   String               @id @default(cuid())
+  clientId             String
+  provider             IntegrationProvider
+  status               IntegrationStatus    @default(PENDING)
+  encryptedCredentials String?
+  metadata             Json?
+  lastSyncedAt         DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, provider])
+}
+
+model ClientCountryConfig {
+  id              String     @id @default(cuid())
+  clientId        String
+  countryCode     String
+  isActive        Boolean    @default(false)
+  mailingListId   String?
+  mailingListName String?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  client          Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  country         Country    @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+
+  @@unique([clientId, countryCode])
+  @@index([countryCode])
+}
+
+model Campaign {
+  id           String           @id @default(cuid())
+  clientId     String
+  name         String
+  description  String?
+  status       CampaignStatus   @default(DRAFT)
+  externalId   String?
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  countryTargets CampaignCountry[]
+}
+
+model CampaignCountry {
+  id           String   @id @default(cuid())
+  campaignId   String
+  countryCode  String
+  mailingListId String?
+  externalId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  country      Country  @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+
+  @@unique([campaignId, countryCode])
+  @@index([countryCode])
+}
+
+
 enum DesignEngine {
   CLAUDE
   GPT4O
@@ -199,6 +299,28 @@ enum PromptStatus {
   DRAFT
   ACTIVE
   ARCHIVED
+}
+
+
+enum IntegrationProvider {
+  SQUALOMAIL
+}
+
+enum IntegrationStatus {
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum CampaignStatus {
+  DRAFT
+  READY
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
 }
 
 enum TemplateType {

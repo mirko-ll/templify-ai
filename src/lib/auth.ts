@@ -1,5 +1,5 @@
-// @ts-ignore
-import { NextAuthOptions } from "next-auth"
+// @ts-expect-error NextAuth type compatibility issues
+import { type NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "./prisma"
@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    // @ts-ignore
+    // @ts-expect-error NextAuth callback type mismatch
     session: async ({ session, token }) => {
       if (session?.user) {
         (session.user as any).id = token.sub!;
@@ -38,7 +38,7 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
-    // @ts-ignore
+    // @ts-expect-error NextAuth JWT callback type mismatch
     jwt: async ({ user, token }) => {
       if (user) {
         (token as any).uid = user.id

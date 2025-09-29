@@ -154,3 +154,23 @@ The application includes the following models:
 - Use strong, unique NEXTAUTH_SECRET
 - Regularly rotate API keys
 - Configure proper CORS settings for production
+### templaito-backend Service
+
+1. Copy `.env.example` inside `templaito-backend/` to `.env` and set:
+   - `PORT` (defaults to `4000`)
+   - `SERVICE_TOKEN` (must match `TEMPLAITO_SERVICE_TOKEN` in the Next.js app)
+   - `SQUALO_API_URL` (base URL of your SqualoMail API proxy)
+2. Install dependencies and start the service:
+   ```bash
+   cd templaito-backend
+   npm install
+   npm run dev
+   ```
+3. In the main `templaito/.env`, set:
+   ```
+   TEMPLAITO_BACKEND_URL=http://localhost:4000
+   TEMPLAITO_SERVICE_TOKEN=the-same-token-you-set-in-backend
+   ENCRYPTION_KEY=<32-char-secret>
+   ```
+4. Restart the Next.js dev server so the client integration picks up the new environment variables.
+

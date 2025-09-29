@@ -69,3 +69,14 @@ MIT
 
 - OpenAI for providing the AI capabilities
 - Next.js team for the excellent framework
+
+### Prisma
+
+This service shares the same Prisma schema as the Next.js app. Copy the database credentials into `.env` (`DATABASE_URL`) and run:
+
+```bash
+npm run prisma:generate
+```
+
+Keep migrations aligned with the frontend by running schema changes in the main app, then syncing here via copy.
+

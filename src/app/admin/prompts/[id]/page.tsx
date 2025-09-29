@@ -16,7 +16,6 @@ import {
   SparklesIcon,
   DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
-import CustomSelect from '@/components/ui/custom-select';
 
 interface Prompt {
   id: string;
@@ -61,28 +60,28 @@ export default function PromptDetailPage() {
   // Remove edit functionality - this is now a view-only page
 
   useEffect(() => {
+    const fetchPrompt = async (id: string) => {
+      try {
+        const response = await fetch(`/api/admin/prompts/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setPrompt(data.prompt);
+        } else {
+          console.error('Failed to fetch prompt');
+          router.push('/admin/prompts');
+        }
+      } catch (error) {
+        console.error('Error fetching prompt:', error);
+        router.push('/admin/prompts');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (params.id) {
       fetchPrompt(params.id as string);
     }
-  }, [params.id]);
-
-  const fetchPrompt = async (id: string) => {
-    try {
-      const response = await fetch(`/api/admin/prompts/${id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPrompt(data.prompt);
-      } else {
-        console.error('Failed to fetch prompt');
-        router.push('/admin/prompts');
-      }
-    } catch (error) {
-      console.error('Error fetching prompt:', error);
-      router.push('/admin/prompts');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [params.id, router]);
 
 
   const handleDelete = async () => {

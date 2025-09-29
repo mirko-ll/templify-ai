@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, FormEvent, useCallback } from "react";
+import type { SyntheticEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -22,6 +23,36 @@ import type {
   TemplateStep,
 } from "@/types/template";
 
+
+interface ClientCountryConfigSummary {
+  id: string;
+  countryCode: string;
+  isActive: boolean;
+  mailingListId?: string | null;
+  mailingListName?: string | null;
+  country?: {
+    code: string;
+    name: string;
+    isActive: boolean;
+  } | null;
+}
+
+interface CountryScrapeResultSingle {
+  type: "SINGLE";
+  urls: string[];
+  productInfo: ProductInfo;
+}
+
+interface CountryScrapeResultMulti {
+  type: "MULTI";
+  urls: string[];
+  multiProductInfo: MultiProductInfo;
+}
+
+type CountryScrapeResult =
+  | CountryScrapeResultSingle
+  | CountryScrapeResultMulti;
+
 interface DatabasePrompt {
   id: string;
   name: string;
@@ -36,14 +67,85 @@ interface DatabasePrompt {
   usageCount: number;
 }
 
+
+
+
+interface PublishImageOverrides {
+  singleImageIndex?: number;
+  multiImageSelections?: Record<number, number>;
+}
+
+function buildCountryUrlState(
+  configs: ClientCountryConfigSummary[],
+  previous?: Record<string, string[]>
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  configs.forEach((config) => {
+    const existing = previous?.[config.countryCode];
+    if (existing && existing.length > 0) {
+      result[config.countryCode] = [...existing];
+    } else {
+      result[config.countryCode] = [""];
+    }
+  });
+  return result;
+}
 export default function TemplaitoApp() {
   const { status } = useSession();
   const router = useRouter();
-  const [urls, setUrls] = useState<string[]>([""]);
+  useEffect(() => {
+    router.prefetch("/campaigns");
+  }, [router]);
+
+  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [countryConfigs, setCountryConfigs] = useState<ClientCountryConfigSummary[]>([]);
+  const [countryUrls, setCountryUrls] = useState<Record<string, string[]>>({});
+  const [contextLoading, setContextLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const trimmedCountryUrls = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    Object.entries(countryUrls).forEach(([countryCode, entries]) => {
+      map[countryCode] = entries
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+    });
+    return map;
+  }, [countryUrls]);
+
+  const allValidUrls = useMemo(() => {
+    return Object.values(trimmedCountryUrls).flat();
+  }, [trimmedCountryUrls]);
+
+  const countryEntries = useMemo(
+    () =>
+      countryConfigs.map((config) => ({
+        code: config.countryCode,
+        entries: trimmedCountryUrls[config.countryCode] ?? [],
+      })),
+    [countryConfigs, trimmedCountryUrls]
+  );
+
+  const hasMultiProductCountry = useMemo(
+    () => countryEntries.some((entry) => entry.entries.length > 1),
+    [countryEntries]
+  );
+
+  const primaryCountryUrl = useMemo(() => {
+    for (const entry of countryEntries) {
+      if (entry.entries.length > 0) {
+        return entry.entries[0];
+      }
+    }
+    return "";
+  }, [countryEntries]);
+
   const [template, setTemplate] = useState<Template | null>(null);
+  const [originalTemplate, setOriginalTemplate] = useState<Template | null>(null);
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
+  const [baseCountry, setBaseCountry] = useState<string | null>(null);
+  const [countryScrapeResults, setCountryScrapeResults] = useState<Record<string, CountryScrapeResult>>({});
   const [selectedTemplateType, setSelectedTemplateType] = useState<
     number | null
   >(null);
@@ -56,11 +158,33 @@ export default function TemplaitoApp() {
   const [selectedProductIndex, setSelectedProductIndex] = useState<number>(0);
   const [multiProductImageSelections, setMultiProductImageSelections] =
     useState<{ [key: number]: number }>({});
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState("");
+  const [globalToast, setGlobalToast] = useState<string | null>(null);
+  const [publishForm, setPublishForm] = useState({
+    sendDate: "",
+    subject: "",
+    preheader: "",
+  });
   const previewRef = useRef<HTMLIFrameElement>(null);
-
   // Fetch available prompts on component mount
   useEffect(() => {
     fetchActivePrompts();
+  }, []);
+
+  useEffect(() => {
+    if (!globalToast) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setGlobalToast(null);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [globalToast]);
+
+  useEffect(() => {
+    loadClientContext();
   }, []);
 
   const fetchActivePrompts = async () => {
@@ -75,16 +199,88 @@ export default function TemplaitoApp() {
     } finally {
       // Prompts loading complete
     }
+  }
+  const loadClientContext = async () => {
+    setContextLoading(true);
+    try {
+      const activeResponse = await fetch("/api/clients/active");
+      if (!activeResponse.ok) {
+        setActiveClientId(null);
+        setCountryConfigs([]);
+        setCountryUrls({});
+        setError("Unable to determine the active client. Please refresh or set one in Clients.");
+        return;
+      }
+
+      const activeData = await activeResponse.json();
+      const clientId = activeData?.clientId ?? null;
+      setActiveClientId(clientId);
+
+      if (!clientId) {
+        setCountryConfigs([]);
+        setCountryUrls({});
+        setError("Select an active client in the Clients area to start generating campaigns.");
+        return;
+      }
+
+      const countriesResponse = await fetch(`/api/clients/${clientId}/countries`);
+      if (!countriesResponse.ok) {
+        setCountryConfigs([]);
+        setCountryUrls({});
+        setError("Unable to load country configuration for the active client.");
+        return;
+      }
+
+      const countriesData = await countriesResponse.json();
+      const configs: ClientCountryConfigSummary[] = Array.isArray(countriesData?.countries)
+        ? countriesData.countries
+        : [];
+
+      const eligible = configs.filter(
+        (config) => config.isActive && !!config.mailingListId
+      );
+
+      setCountryConfigs(eligible);
+
+      if (eligible.length === 0) {
+        setCountryUrls({});
+        setError("No active countries with mailing lists found. Connect mailing lists in the client settings first.");
+        return;
+      }
+
+      setCountryUrls((previous) => buildCountryUrlState(eligible, previous));
+      setError("");
+    } catch (err) {
+      console.error(err);
+      setActiveClientId(null);
+      setCountryConfigs([]);
+      setCountryUrls({});
+      setError("Unexpected error loading client configuration. Please try again.");
+    } finally {
+      setContextLoading(false);
+    }
   };
 
-  const handleUrlSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUrlSubmit = async (event?: SyntheticEvent) => {
+    event?.preventDefault();
 
-    // Filter out empty URLs
-    const validUrls = urls.filter((url) => url.trim() !== "");
+    if (contextLoading) {
+      setError("Still loading client configuration. Please wait a moment.");
+      return;
+    }
 
-    if (validUrls.length === 0) {
-      setError("Please enter at least one URL");
+    if (!activeClientId) {
+      setError("Select an active client in the Clients area to start generating campaigns.");
+      return;
+    }
+
+    if (countryConfigs.length === 0) {
+      setError("No active countries with mailing lists are available. Configure them in the Clients section.");
+      return;
+    }
+
+    if ((isMultiProduct && allValidUrls.length === 0) || (!isMultiProduct && !primaryCountryUrl)) {
+      setError("Please enter at least one product URL.");
       return;
     }
 
@@ -92,36 +288,75 @@ export default function TemplaitoApp() {
     setStep("template-selection");
   };
 
-  const addUrlInput = () => {
-    setUrls([...urls, ""]);
+  const updateCountryUrl = (countryCode: string, index: number, value: string) => {
+    setCountryUrls((prev) => {
+      const current = prev[countryCode] ?? [""];
+      const next = [...current];
+      next[index] = value;
+      return {
+        ...prev,
+        [countryCode]: next,
+      };
+    });
   };
 
-  const removeUrlInput = (index: number) => {
-    if (urls.length > 1) {
-      const newUrls = urls.filter((_, i) => i !== index);
-      setUrls(newUrls);
-    }
+  const addCountryUrl = (countryCode: string) => {
+    setCountryUrls((prev) => {
+      const current = prev[countryCode] ?? [""];
+      return {
+        ...prev,
+        [countryCode]: [...current, ""],
+      };
+    });
   };
 
-  const updateUrl = (index: number, value: string) => {
-    const newUrls = [...urls];
-    newUrls[index] = value;
-    setUrls(newUrls);
-  };
+  const removeCountryUrl = (countryCode: string, index: number) => {
+    setCountryUrls((prev) => {
+      const current = prev[countryCode] ?? [""];
+      if (current.length <= 1) {
+        const replacement = [...current];
+        replacement[0] = "";
+        return {
+          ...prev,
+          [countryCode]: replacement,
+        };
+      }
 
+      const next = current.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        [countryCode]: next.length > 0 ? next : [""],
+      };
+    });
+  };
   const handleTemplateSelection = async (templateIndex: number) => {
     setSelectedTemplateType(templateIndex);
     setLoading(true);
     setError("");
     setTemplate(null);
+    setOriginalTemplate(null);
     setProductInfo(null);
     setSelectedImageIndex(0); // Reset selected image
     setSelectedProductIndex(0); // Reset selected product
     setMultiProductImageSelections({}); // Reset multi-product selections
+    setBaseCountry(null);
+    setCountryScrapeResults({});
     setStep("processing");
 
+    const urlsForRequest = isMultiProduct
+      ? allValidUrls
+      : primaryCountryUrl
+      ? [primaryCountryUrl]
+      : [];
+
+    if (urlsForRequest.length === 0) {
+      setError("Please enter at least one product URL.");
+      setStep("input");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const validUrls = urls.filter((url) => url.trim() !== "");
 
       const response = await fetch("/api/scrape", {
         method: "POST",
@@ -129,7 +364,9 @@ export default function TemplaitoApp() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          url: validUrls.length === 1 ? validUrls[0] : validUrls, // Send single URL or array
+          clientId: activeClientId,
+          countryUrls: trimmedCountryUrls,
+          url: urlsForRequest.length === 1 ? urlsForRequest[0] : urlsForRequest, // Send single URL or array
           templateType: availableTemplates[templateIndex],
         }),
       });
@@ -140,8 +377,17 @@ export default function TemplaitoApp() {
 
       const data = await response.json();
 
-      setTemplate(data.emailTemplate);
+      setBaseCountry(data.baseCountry ?? null);
+      setCountryScrapeResults(data.countryResults ?? {});
+      setOriginalTemplate(data.emailTemplate);
+      setTemplate(data.previewTemplate ?? data.emailTemplate);
       setProductInfo(data.productInfo);
+      setPublishForm((prev) => ({
+        ...prev,
+        subject: (data.previewTemplate ?? data.emailTemplate)?.subject ?? prev.subject,
+        preheader: prev.preheader,
+        sendDate: prev.sendDate,
+      }));
       setStep("results");
 
       // Track successful template generation
@@ -154,7 +400,7 @@ export default function TemplaitoApp() {
           body: JSON.stringify({
             templateType: availableTemplates[templateIndex].name,
             templateId: availableTemplates[templateIndex].id,
-            urlCount: validUrls.length,
+            urlCount: urlsForRequest.length,
             wasSuccessful: true,
           }),
         });
@@ -177,7 +423,7 @@ export default function TemplaitoApp() {
           body: JSON.stringify({
             templateType: availableTemplates[templateIndex].name,
             templateId: availableTemplates[templateIndex].id,
-            urlCount: validUrls.length,
+            urlCount: urlsForRequest.length,
             wasSuccessful: false,
           }),
         });
@@ -204,26 +450,18 @@ export default function TemplaitoApp() {
             product.images[selectedImageIndex] || product.bestImageUrl;
 
           if (selectedImageUrl !== product.bestImageUrl) {
-            updatedHtml = updatedHtml.replace(
-              new RegExp(
-                product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                "g"
-              ),
-              selectedImageUrl
-            );
+            const originalImageUrl = product.bestImageUrl;
+            updatedHtml = updatedHtml.split(originalImageUrl).join(selectedImageUrl);
           }
         });
       } else {
         // For single product, replace the best image URL with the selected image URL
         const selectedImageUrl =
           productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-        updatedHtml = template.html.replace(
-          new RegExp(
-            productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-            "g"
-          ),
-          selectedImageUrl
-        );
+        const originalImageUrl = productInfo.bestImageUrl;
+        updatedHtml = template.html
+          .split(originalImageUrl)
+          .join(selectedImageUrl);
       }
 
       navigator.clipboard.writeText(updatedHtml);
@@ -246,26 +484,18 @@ export default function TemplaitoApp() {
             product.images[selectedImageIndex] || product.bestImageUrl;
 
           if (selectedImageUrl !== product.bestImageUrl) {
-            updatedHtml = updatedHtml.replace(
-              new RegExp(
-                product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                "g"
-              ),
-              selectedImageUrl
-            );
+            const originalImageUrl = product.bestImageUrl;
+            updatedHtml = updatedHtml.split(originalImageUrl).join(selectedImageUrl);
           }
         });
       } else {
         // For single product, replace the best image URL with the selected image URL
         const selectedImageUrl =
           productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-        updatedHtml = template.html.replace(
-          new RegExp(
-            productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-            "g"
-          ),
-          selectedImageUrl
-        );
+        const originalImageUrl = productInfo.bestImageUrl;
+        updatedHtml = template.html
+          .split(originalImageUrl)
+          .join(selectedImageUrl);
       }
 
       // Open a new window and write the HTML directly
@@ -290,20 +520,118 @@ export default function TemplaitoApp() {
   };
 
   const resetForm = () => {
-    setUrls([""]);
+    setCountryUrls(buildCountryUrlState(countryConfigs));
     setStep("input");
     setTemplate(null);
+    setOriginalTemplate(null);
     setProductInfo(null);
     setSelectedTemplateType(null);
     setSelectedImageIndex(0);
     setSelectedProductIndex(0);
     setMultiProductImageSelections({});
+    setBaseCountry(null);
+    setCountryScrapeResults({});
+    setPublishModalOpen(false);
+    setPublishError("");
+    setPublishForm({ sendDate: "", subject: "", preheader: "" });
     setError("");
+    setGlobalToast(null);
+  };
+
+  const openPublishModal = () => {
+    setPublishError("");
+    setPublishForm((prev) => ({
+      ...prev,
+      subject: prev.subject || template?.subject || "",
+    }));
+    setPublishModalOpen(true);
+  };
+
+  const closePublishModal = () => {
+    if (!publishLoading) {
+      setPublishModalOpen(false);
+      setPublishError("");
+    }
+  };
+
+  const updatePublishForm = (field: "sendDate" | "subject" | "preheader", value: string) => {
+    setPublishForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handlePublish = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!template || !activeClientId) {
+      setPublishError("Generate a template before publishing.");
+      return;
+    }
+    if (!publishForm.subject.trim()) {
+      setPublishError("Subject is required.");
+      return;
+    }
+    if (!countryScrapeResults || Object.keys(countryScrapeResults).length === 0) {
+      setPublishError("No country data available. Generate a template first.");
+      return;
+    }
+
+    setPublishLoading(true);
+    setPublishError("");
+
+    try {
+      const response = await fetch(
+        `/api/clients/${activeClientId}/campaigns/squalomail`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            baseCountry,
+            subject: publishForm.subject,
+            preheader: publishForm.preheader,
+            sendDate: publishForm.sendDate || null,
+            emailTemplate: originalTemplate ?? template,
+            countryResults: countryScrapeResults,
+            imageOverrides: buildImageOverrides(),
+          }),
+        }
+      );
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = payload?.error || "Failed to publish campaign.";
+        throw new Error(message);
+      }
+
+      setPublishLoading(false);
+      const successMessage = "Publishing campaign to SqualoMail. Track progress in Campaigns.";
+      setPublishModalOpen(false);
+      setPublishForm({ sendDate: "", subject: "", preheader: "" });
+      setPublishError("");
+      setGlobalToast(successMessage);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("templaito_publish_toast", successMessage);
+      }
+      const params = new URLSearchParams();
+      params.set("clientId", activeClientId);
+      router.push(`/campaigns?${params.toString()}`);
+    } catch (error) {
+      console.error("Failed to publish to SqualoMail", error);
+      setPublishError(
+        error instanceof Error ? error.message : "Failed to publish. Please try again."
+      );
+    } finally {
+      setPublishLoading(false);
+    }
   };
 
   const goBackToTemplateSelection = () => {
     setStep("template-selection");
     setTemplate(null);
+    setOriginalTemplate(null);
     setSelectedTemplateType(null);
     setSelectedImageIndex(0);
     setSelectedProductIndex(0);
@@ -321,8 +649,43 @@ export default function TemplaitoApp() {
   };
 
   // Determine which templates to show
-  const validUrls = urls.filter((url) => url.trim() !== "");
-  const isMultiProduct = validUrls.length > 1;
+  const isMultiProduct = hasMultiProductCountry;
+
+  const buildImageOverrides = useCallback((): PublishImageOverrides | undefined => {
+    if (!productInfo) {
+      return undefined;
+    }
+
+    if (isMultiProduct && "products" in productInfo) {
+      const multiInfo = productInfo as MultiProductInfo;
+      const selections: Record<number, number> = {};
+
+      multiInfo.products?.forEach((product: ProductInfo, index: number) => {
+        const chosen = multiProductImageSelections[index] ?? 0;
+        const images = Array.isArray(product.images) ? product.images : [];
+        const selectedUrl = images[chosen];
+        if (selectedUrl && selectedUrl !== product.bestImageUrl) {
+          selections[index] = chosen;
+        }
+      });
+
+      return Object.keys(selections).length > 0
+        ? { multiImageSelections: selections }
+        : undefined;
+    }
+
+    if (!('products' in productInfo)) {
+      const singleInfo = productInfo as ProductInfo;
+      const images = Array.isArray(singleInfo.images) ? singleInfo.images : [];
+      const selectedUrl = images[selectedImageIndex] ?? singleInfo.bestImageUrl;
+      if (selectedUrl && selectedUrl !== singleInfo.bestImageUrl) {
+        return { singleImageIndex: selectedImageIndex };
+      }
+    }
+
+    return undefined;
+  }, [productInfo, isMultiProduct, multiProductImageSelections, selectedImageIndex]);
+
   const availableTemplates = isMultiProduct
     ? availablePrompts.filter(
         (prompt) => prompt.templateType === "MULTI_PRODUCT"
@@ -352,26 +715,18 @@ export default function TemplaitoApp() {
               product.images[selectedImageIndex] || product.bestImageUrl;
 
             if (selectedImageUrl !== product.bestImageUrl) {
-              updatedHtml = updatedHtml.replace(
-                new RegExp(
-                  product.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                  "g"
-                ),
-                selectedImageUrl
-              );
+              const originalImageUrl = product.bestImageUrl;
+              updatedHtml = updatedHtml.split(originalImageUrl).join(selectedImageUrl);
             }
           });
         } else {
           // For single product, replace the best image URL with the selected image URL
           const selectedImageUrl =
             productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-          updatedHtml = template.html.replace(
-            new RegExp(
-              productInfo.bestImageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-              "g"
-            ),
-            selectedImageUrl
-          );
+          const originalImageUrl = productInfo.bestImageUrl;
+          updatedHtml = template.html
+            .split(originalImageUrl)
+            .join(selectedImageUrl);
         }
 
         doc.open();
@@ -421,7 +776,16 @@ export default function TemplaitoApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    <>
+      {globalToast && (
+        <div className="fixed top-4 right-4 z-[2000] max-w-sm rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
+          <div className="flex items-start gap-3">
+            <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500" />
+            <div className="text-sm text-emerald-700">{globalToast}</div>
+          </div>
+        </div>
+      )}
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Animated Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
@@ -470,74 +834,125 @@ export default function TemplaitoApp() {
                 <div className="space-y-6">
                   <div className="relative">
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      Product URL{urls.length > 1 ? "s" : ""}
+                      Step 1: Provide product URLs for each active country
                     </label>
 
-                    {/* URL Inputs */}
-                    <div className="space-y-3">
-                      {urls.map((url, index) => (
-                        <div key={index} className="relative">
-                          <LinkIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            type="url"
-                            value={url}
-                            onChange={(e) => updateUrl(index, e.target.value)}
-                            placeholder={`https://example.com/product/amazing-widget-${
-                              index + 1
-                            }`}
-                            className="w-full pl-12 pr-12 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-500 duration-200 text-lg"
-                            onKeyPress={(e) =>
-                              e.key === "Enter" && handleUrlSubmit(e)
-                            }
-                          />
-                          {urls.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeUrlInput(index)}
-                              className="absolute right-4 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400 hover:text-red-500 transition-colors duration-200"
-                              title="Remove URL"
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    {contextLoading ? (
+                      <div className="flex items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-sm text-gray-500">
+                        Loading client configuration...
+                      </div>
+                    ) : countryConfigs.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center space-y-3">
+                        <h3 className="text-lg font-semibold text-gray-800">No ready countries</h3>
+                        <p className="text-sm text-gray-500">
+                          Activate countries and connect mailing lists for your active client before generating templates.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => router.push("/clients")}
+                          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-white text-sm font-semibold shadow-lg hover:shadow-xl"
+                        >
+                          Manage clients
+                          <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-6">
+                          {countryConfigs.map((config) => {
+                            const entries = countryUrls[config.countryCode] ?? [""];
+                            const countryName = config.country?.name || config.countryCode;
 
-                    {/* Add URL Button */}
-                    <div className="mt-4 flex items-center justify-between cursor-pointer">
+                            return (
+                              <div
+                                key={config.id}
+                                className="rounded-2xl border border-gray-200 bg-white/70 p-5 shadow-sm"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-gray-900">{countryName}</h3>
+                                    <p className="text-sm text-gray-500">
+                                      Mailing list: {config.mailingListName || config.mailingListId}
+                                    </p>
+                                  </div>
+                                  <div className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
+                                    {config.countryCode}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  {entries.map((value, index) => (
+                                    <div key={`${config.countryCode}-${index}`} className="relative group">
+                                      <LinkIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                      <input
+                                        type="url"
+                                        value={value}
+                                        onChange={(event) =>
+                                          updateCountryUrl(config.countryCode, index, event.target.value)
+                                        }
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            handleUrlSubmit(event);
+                                          }
+                                        }}
+                                        placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}-${index + 1}`}
+                                        className="w-full pl-12 pr-12 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-500 duration-200 text-lg"
+                                      />
+                                      {entries.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeCountryUrl(config.countryCode, index)}
+                                          className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400 hover:text-red-500 transition-colors duration-200"
+                                          title="Remove URL"
+                                        >
+                                          {'×'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => addCountryUrl(config.countryCode)}
+                                  className="mt-4 inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
+                                >
+                                  <span className="text-base leading-none">+</span>
+                                  Add another URL for {countryName}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center justify-between pt-2 text-sm text-gray-500">
+                          <span>{`Active countries: ${countryConfigs.length}`}</span>
+                          <span>
+                            {allValidUrls.length === 0
+                              ? "No product URLs added yet"
+                              : `${allValidUrls.length} product URL${allValidUrls.length > 1 ? "s" : ""} ready`}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="mt-6">
                       <button
                         type="button"
-                        onClick={addUrlInput}
-                        className="inline-flex items-center cursor-pointer gap-2 text-indigo-600 hover:text-indigo-700 font-semibold transition-colors duration-200"
+                        onClick={handleUrlSubmit}
+                        disabled={loading || contextLoading}
+                        className="w-full cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                       >
-                        <span className="text-lg cursor-pointer">+</span>
-                        Add URL
+                        <span className="flex items-center justify-center gap-2 text-lg">
+                          <SparklesIcon className="w-6 h-6" />
+                          Continue to Template Selection
+                        </span>
                       </button>
-                      <p className="text-sm text-gray-500">
-                        {urls.length === 1
-                          ? "Step 1: Enter your product URL ✨"
-                          : `Step 1: ${validUrls.length} URLs for Multi-Product Landing 🛍️`}
-                      </p>
                     </div>
+                    {error && (
+                      <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
+                        <p className="text-red-700">{error}</p>
+                      </div>
+                    )}
                   </div>
-
-                  <button
-                    onClick={handleUrlSubmit}
-                    disabled={loading}
-                    className="w-full cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                  >
-                    <span className="flex items-center justify-center gap-2 text-lg">
-                      <SparklesIcon className="w-6 h-6" />
-                      Continue to Template Selection
-                    </span>
-                  </button>
-
-                  {error && (
-                    <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
-                      <p className="text-red-700">{error}</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -600,8 +1015,8 @@ export default function TemplaitoApp() {
                   <div className="mt-4 text-sm text-gray-500">
                     {isMultiProduct ? (
                       <div className="space-y-1">
-                        <div>Products ({validUrls.length}):</div>
-                        {validUrls.map((url, index) => (
+                        <div>Products ({allValidUrls.length}):</div>
+                        {allValidUrls.map((url, index) => (
                           <div
                             key={index}
                             className="font-mono bg-gray-100 px-2 py-1 rounded inline-block mr-2 mb-1"
@@ -617,7 +1032,7 @@ export default function TemplaitoApp() {
                       <span>
                         URL:{" "}
                         <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                          {validUrls[0]}
+                          {allValidUrls[0]}
                         </span>
                       </span>
                     )}
@@ -726,7 +1141,6 @@ export default function TemplaitoApp() {
               </div>
             </div>
           )}
-
           {step === "results" && template && (
             <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 overflow-hidden mb-8">
               <div className="p-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
@@ -743,10 +1157,16 @@ export default function TemplaitoApp() {
                       {productInfo?.title && `For: ${productInfo.title}`}
                       {productInfo?.language &&
                         ` (${productInfo.language.toUpperCase()})`}
-                      {isMultiProduct && ` - ${validUrls.length} Products`}
+                      {isMultiProduct && ` - ${allValidUrls.length} Products`}
                     </p>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-3 justify-end">
+                    <button
+                      onClick={openPublishModal}
+                      className="bg-white text-indigo-600 hover:bg-indigo-50 cursor-pointer px-4 py-2 rounded-xl shadow transition-colors duration-200"
+                    >
+                      Publish to SqualoMail
+                    </button>
                     <button
                       onClick={goBackToTemplateSelection}
                       className="bg-white/20 hover:bg-white/30 cursor-pointer px-4 py-2 rounded-xl transition-colors duration-200"
@@ -1001,13 +1421,114 @@ export default function TemplaitoApp() {
         {/* Footer */}
         <footer className="mt-20 py-12 text-center text-gray-500">
           <div className="flex justify-center gap-6 text-sm">
-            <span>🚀 2-Step Process</span>
+            <span>⚡ 2-Step Process</span>
             <span>🎨 AI Copywriting + Design</span>
             <span>📱 Mobile Responsive</span>
-            <span>⚡ Claude + OpenAI</span>
+            <span>🤖 Claude + OpenAI</span>
           </div>
         </footer>
       </div>
+
+      {publishModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+          <div
+            className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
+            onClick={closePublishModal}
+          />
+          <div className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-8">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="text-2xl font-semibold text-gray-900">
+                  Schedule Squalomail Campaign
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pick a subject, preheader, and optional send date before we hand the template to Squalomail.
+                </p>
+              </div>
+              <button
+                onClick={closePublishModal}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                aria-label="Close"
+                type="button"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handlePublish} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Subject line *
+                </label>
+                <input
+                  type="text"
+                  value={publishForm.subject}
+                  onChange={(e) => updatePublishForm("subject", e.target.value)}
+                  placeholder="e.g. {subtag:name}, Exclusive weekend offer"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Preheader
+                </label>
+                <input
+                  type="text"
+                  value={publishForm.preheader}
+                  onChange={(e) => updatePublishForm("preheader", e.target.value)}
+                  placeholder="Short teaser that appears in the inbox preview"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Send date/time (optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={publishForm.sendDate}
+                  onChange={(e) => updatePublishForm("sendDate", e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Leave empty to send immediately after publishing.
+                </p>
+              </div>
+
+              {publishError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm">
+                  {publishError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-gray-400">
+                  We&apos;ll translate subject/preheader per country before creating the newsletter.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={closePublishModal}
+                    className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={publishLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={publishLoading}
+                  >
+                    {publishLoading ? "Preparing..." : "Continue to publish"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .animation-delay-1000 {
@@ -1019,10 +1540,30 @@ export default function TemplaitoApp() {
         .animation-delay-4000 {
           animation-delay: 4s;
         }
-        .hover\\:scale-102:hover {
+        .hover\:scale-102:hover {
           transform: scale(1.02);
         }
       `}</style>
     </div>
+    </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

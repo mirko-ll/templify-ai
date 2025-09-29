@@ -43,38 +43,39 @@ export default function EditPromptPage() {
   });
 
   useEffect(() => {
+    const fetchPrompt = async (id: string) => {
+      try {
+        const response = await fetch(`/api/admin/prompts/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setPrompt(data.prompt);
+          setFormData({
+            name: data.prompt.name,
+            description: data.prompt.description || "",
+            systemPrompt: data.prompt.systemPrompt,
+            userPrompt: data.prompt.userPrompt,
+            designEngine: data.prompt.designEngine,
+            templateType: data.prompt.templateType || "SINGLE_PRODUCT",
+            status: data.prompt.status,
+            isDefault: data.prompt.isDefault,
+          });
+        } else {
+          console.error("Failed to fetch prompt");
+          router.push("/admin/prompts");
+        }
+      } catch (error) {
+        console.error("Error fetching prompt:", error);
+        router.push("/admin/prompts");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (params.id) {
       fetchPrompt(params.id as string);
     }
-  }, [params.id]);
+  }, [params.id, router]);
 
-  const fetchPrompt = async (id: string) => {
-    try {
-      const response = await fetch(`/api/admin/prompts/${id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPrompt(data.prompt);
-        setFormData({
-          name: data.prompt.name,
-          description: data.prompt.description || "",
-          systemPrompt: data.prompt.systemPrompt,
-          userPrompt: data.prompt.userPrompt,
-          designEngine: data.prompt.designEngine,
-          templateType: data.prompt.templateType || "SINGLE_PRODUCT",
-          status: data.prompt.status,
-          isDefault: data.prompt.isDefault,
-        });
-      } else {
-        console.error("Failed to fetch prompt");
-        router.push("/admin/prompts");
-      }
-    } catch (error) {
-      console.error("Error fetching prompt:", error);
-      router.push("/admin/prompts");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
