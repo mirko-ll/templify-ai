@@ -13,6 +13,7 @@ import {
   XCircleIcon,
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
+import { PageLoadingSpinner, InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface CampaignTargetSummary {
   id: string;
@@ -644,8 +645,8 @@ function CampaignsPageContent() {
             ) : null}
 
             {activeClientId && loading ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-slate-500">
-                Loading campaigns...
+              <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center">
+                <InlineLoadingSpinner text="Loading campaigns..." />
               </div>
             ) : null}
 
@@ -875,12 +876,7 @@ function CampaignsPageContent() {
 
 export default function CampaignsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-        <p className="mt-4 text-slate-600">Loading campaigns...</p>
-      </div>
-    </div>}>
+    <Suspense fallback={<PageLoadingSpinner text="Loading campaigns..." />}>
       <CampaignsPageContent />
     </Suspense>
   );

@@ -7,6 +7,7 @@ import {
   ArrowTopRightOnSquareIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
+import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface ClientSummary {
   id: string;
@@ -242,8 +243,8 @@ export default function ClientsPage() {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-gray-500">
-            Loading clients...
+          <div className="flex items-center justify-center py-20">
+            <InlineLoadingSpinner text="Loading clients..." />
           </div>
         ) : activeClients.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white py-16 text-center">

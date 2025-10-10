@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface Country {
   code: string;
@@ -180,8 +181,8 @@ export default function AdminCountriesPage() {
       )}
 
       {loading ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-500">
-          Loading countries...
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
+          <InlineLoadingSpinner text="Loading countries..." />
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-gray-200">

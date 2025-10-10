@@ -122,7 +122,11 @@ export default function Header() {
                     {session.user.image ? (
                       <Image
                         src={session.user.image}
-                        alt={session.user.name || session.user.email || "User avatar"}
+                        alt={
+                          session.user.name ||
+                          session.user.email ||
+                          "User avatar"
+                        }
                         width={40}
                         height={40}
                         className="w-10 h-10 rounded-full border border-indigo-100"
@@ -136,7 +140,9 @@ export default function Header() {
                       <p className="text-sm font-semibold text-gray-900">
                         {session.user.name || "Account"}
                       </p>
-                      <p className="text-xs text-gray-500">{session.user.email}</p>
+                      <p className="text-xs text-gray-500">
+                        {session.user.email}
+                      </p>
                     </div>
                     <ChevronDownIcon className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition" />
                   </Menu.Button>
@@ -157,7 +163,11 @@ export default function Header() {
                         {session.user.image ? (
                           <Image
                             src={session.user.image}
-                            alt={session.user.name || session.user.email || "User avatar"}
+                            alt={
+                              session.user.name ||
+                              session.user.email ||
+                              "User avatar"
+                            }
                             width={44}
                             height={44}
                             className="w-11 h-11 rounded-full border border-indigo-100"
@@ -171,7 +181,9 @@ export default function Header() {
                           <p className="text-sm font-semibold text-gray-900">
                             {session.user.name || "Account"}
                           </p>
-                          <p className="text-xs text-gray-500">{session.user.email}</p>
+                          <p className="text-xs text-gray-500">
+                            {session.user.email}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -181,7 +193,9 @@ export default function Header() {
                         <Link
                           href="/clients"
                           className={`${
-                            active ? "bg-gradient-to-r from-indigo-50 to-purple-50" : ""
+                            active
+                              ? "bg-gradient-to-r from-indigo-50 to-purple-50"
+                              : ""
                           } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                         >
                           <div className="w-8 h-8 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-indigo-200 group-hover:to-purple-200 transition-all duration-200">
@@ -189,7 +203,9 @@ export default function Header() {
                           </div>
                           <div>
                             <p className="font-medium">Clients</p>
-                            <p className="text-xs text-gray-500">Manage client workspaces</p>
+                            <p className="text-xs text-gray-500">
+                              Manage client workspaces
+                            </p>
                           </div>
                         </Link>
                       )}
@@ -200,7 +216,9 @@ export default function Header() {
                         <Link
                           href="/campaigns"
                           className={`${
-                            active ? "bg-gradient-to-r from-purple-50 to-pink-50" : ""
+                            active
+                              ? "bg-gradient-to-r from-purple-50 to-pink-50"
+                              : ""
                           } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                         >
                           <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-pink-200 transition-all duration-200">
@@ -208,7 +226,9 @@ export default function Header() {
                           </div>
                           <div>
                             <p className="font-medium">Campaigns</p>
-                            <p className="text-xs text-gray-500">Monitor SqualoMail deliveries</p>
+                            <p className="text-xs text-gray-500">
+                              Monitor SqualoMail deliveries
+                            </p>
                           </div>
                         </Link>
                       )}
@@ -219,7 +239,9 @@ export default function Header() {
                         <Link
                           href="/profile"
                           className={`${
-                            active ? "bg-gradient-to-r from-indigo-50 to-purple-50" : ""
+                            active
+                              ? "bg-gradient-to-r from-indigo-50 to-purple-50"
+                              : ""
                           } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                         >
                           <div className="w-8 h-8 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-indigo-200 group-hover:to-purple-200 transition-all duration-200">
@@ -227,7 +249,9 @@ export default function Header() {
                           </div>
                           <div>
                             <p className="font-medium">Profile Settings</p>
-                            <p className="text-xs text-gray-500">Manage your account</p>
+                            <p className="text-xs text-gray-500">
+                              Manage your account
+                            </p>
                           </div>
                         </Link>
                       )}
@@ -241,7 +265,9 @@ export default function Header() {
                             <Link
                               href="/admin/prompts"
                               className={`${
-                                active ? "bg-gradient-to-r from-purple-50 to-pink-50" : ""
+                                active
+                                  ? "bg-gradient-to-r from-purple-50 to-pink-50"
+                                  : ""
                               } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                             >
                               <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-pink-200 transition-all duration-200">
@@ -249,7 +275,9 @@ export default function Header() {
                               </div>
                               <div>
                                 <p className="font-medium">Prompt Generator</p>
-                                <p className="text-xs text-gray-500">Admin panel & tools</p>
+                                <p className="text-xs text-gray-500">
+                                  Admin panel & tools
+                                </p>
                               </div>
                             </Link>
                           )}
@@ -259,7 +287,9 @@ export default function Header() {
                             <Link
                               href="/admin/countries"
                               className={`${
-                                active ? "bg-gradient-to-r from-blue-50 to-indigo-50" : ""
+                                active
+                                  ? "bg-gradient-to-r from-blue-50 to-indigo-50"
+                                  : ""
                               } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
                             >
                               <div className="w-8 h-8 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-blue-200 group-hover:to-indigo-200 transition-all duration-200">
@@ -267,7 +297,9 @@ export default function Header() {
                               </div>
                               <div>
                                 <p className="font-medium">Countries</p>
-                                <p className="text-xs text-gray-500">Manage supported regions</p>
+                                <p className="text-xs text-gray-500">
+                                  Manage supported regions
+                                </p>
                               </div>
                             </Link>
                           )}
@@ -289,7 +321,9 @@ export default function Header() {
                           </div>
                           <div>
                             <p className="font-medium">Sign out</p>
-                            <p className="text-xs text-gray-500">See you soon!</p>
+                            <p className="text-xs text-gray-500">
+                              See you soon!
+                            </p>
                           </div>
                         </button>
                       )}

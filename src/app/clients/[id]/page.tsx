@@ -13,6 +13,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { PageLoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface ClientDetail {
   id: string;
@@ -69,7 +70,9 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [countries, setCountries] = useState<CountryConfig[]>([]);
-  const [integration, setIntegration] = useState<SqualoIntegration | null>(null);
+  const [integration, setIntegration] = useState<SqualoIntegration | null>(
+    null
+  );
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -82,15 +85,19 @@ export default function ClientDetailPage() {
   const [integrationAlert, setIntegrationAlert] = useState<Alert | null>(null);
   const [countryAlert, setCountryAlert] = useState<Alert | null>(null);
 
-  const request = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message = payload?.error || response.statusText || "Request failed";
-      throw new Error(message);
-    }
-    return response;
-  }, []);
+  const request = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message =
+          payload?.error || response.statusText || "Request failed";
+        throw new Error(message);
+      }
+      return response;
+    },
+    []
+  );
 
   const loadData = useCallback(async () => {
     if (!clientId) {
@@ -105,12 +112,13 @@ export default function ClientDetailPage() {
     setCountryAlert(null);
 
     try {
-      const [clientRes, countryRes, integrationRes, activeRes] = await Promise.all([
-        fetch(`/api/clients/${clientId}`),
-        fetch(`/api/clients/${clientId}/countries`),
-        fetch(`/api/clients/${clientId}/integration/squalomail`),
-        fetch(`/api/clients/active`),
-      ]);
+      const [clientRes, countryRes, integrationRes, activeRes] =
+        await Promise.all([
+          fetch(`/api/clients/${clientId}`),
+          fetch(`/api/clients/${clientId}/countries`),
+          fetch(`/api/clients/${clientId}/integration/squalomail`),
+          fetch(`/api/clients/active`),
+        ]);
 
       if (clientRes.status === 404) {
         setError("Client not found");
@@ -128,8 +136,12 @@ export default function ClientDetailPage() {
       setClient(clientData.client);
 
       if (countryRes.ok) {
-        const countryData = (await countryRes.json()) as { countries: CountryConfig[] };
-        setCountries(Array.isArray(countryData.countries) ? countryData.countries : []);
+        const countryData = (await countryRes.json()) as {
+          countries: CountryConfig[];
+        };
+        setCountries(
+          Array.isArray(countryData.countries) ? countryData.countries : []
+        );
       }
 
       if (integrationRes.ok) {
@@ -140,7 +152,9 @@ export default function ClientDetailPage() {
       }
 
       if (activeRes.ok) {
-        const activeData = (await activeRes.json()) as { clientId: string | null };
+        const activeData = (await activeRes.json()) as {
+          clientId: string | null;
+        };
         setActiveClientId(activeData.clientId ?? null);
       }
     } catch (err) {
@@ -157,7 +171,9 @@ export default function ClientDetailPage() {
 
   const mailingLists = useMemo(() => {
     const lists = integration?.metadata && (integration.metadata as any).lists;
-    return Array.isArray(lists) ? (lists as Array<{ id: string; name: string }>) : [];
+    return Array.isArray(lists)
+      ? (lists as Array<{ id: string; name: string }>)
+      : [];
   }, [integration]);
 
   const mailingListOptions = useMemo(
@@ -182,7 +198,9 @@ export default function ClientDetailPage() {
       setActiveClientId(clientId);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Unable to set active client");
+      setError(
+        err instanceof Error ? err.message : "Unable to set active client"
+      );
     } finally {
       setSavingActive(false);
     }
@@ -207,27 +225,38 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleConnectIntegration = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleConnectIntegration = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
     if (!clientId) return;
 
     setIntegrationAlert(null);
     try {
-      const response = await request(`/api/clients/${clientId}/integration/squalomail`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
-      });
-      const data = (await response.json()) as { integration: SqualoIntegration | null };
+      const response = await request(
+        `/api/clients/${clientId}/integration/squalomail`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
+        }
+      );
+      const data = (await response.json()) as {
+        integration: SqualoIntegration | null;
+      };
       setIntegration(data.integration ?? null);
       setIntegrationModalOpen(false);
       setApiKeyInput("");
-      setIntegrationAlert({ type: "success", message: "SqualoMail connected successfully." });
+      setIntegrationAlert({
+        type: "success",
+        message: "SqualoMail connected successfully.",
+      });
     } catch (err) {
       console.error(err);
       setIntegrationAlert({
         type: "error",
-        message: err instanceof Error ? err.message : "Could not connect SqualoMail",
+        message:
+          err instanceof Error ? err.message : "Could not connect SqualoMail",
       });
     }
   };
@@ -241,12 +270,18 @@ export default function ClientDetailPage() {
         method: "DELETE",
       });
       setIntegration(null);
-      setIntegrationAlert({ type: "success", message: "Integration disconnected." });
+      setIntegrationAlert({
+        type: "success",
+        message: "Integration disconnected.",
+      });
     } catch (err) {
       console.error(err);
       setIntegrationAlert({
         type: "error",
-        message: err instanceof Error ? err.message : "Could not disconnect integration",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not disconnect integration",
       });
     }
   };
@@ -256,20 +291,34 @@ export default function ClientDetailPage() {
 
     setIntegrationAlert(null);
     try {
-      const response = await request(`/api/clients/${clientId}/integration/squalomail?refresh=1`);
-      const data = (await response.json()) as { integration: SqualoIntegration | null };
+      const response = await request(
+        `/api/clients/${clientId}/integration/squalomail?refresh=1`
+      );
+      const data = (await response.json()) as {
+        integration: SqualoIntegration | null;
+      };
       setIntegration(data.integration ?? null);
-      setIntegrationAlert({ type: "success", message: "Mailing lists refreshed." });
+      setIntegrationAlert({
+        type: "success",
+        message: "Mailing lists refreshed.",
+      });
     } catch (err) {
       console.error(err);
       setIntegrationAlert({
         type: "error",
-        message: err instanceof Error ? err.message : "Unable to refresh mailing lists",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Unable to refresh mailing lists",
       });
     }
   };
 
-  const updateCountry = async (countryCode: string, payload: Record<string, unknown>, success?: string) => {
+  const updateCountry = async (
+    countryCode: string,
+    payload: Record<string, unknown>,
+    success?: string
+  ) => {
     if (!clientId) return;
 
     setCountryAlert(null);
@@ -288,7 +337,10 @@ export default function ClientDetailPage() {
       console.error(err);
       setCountryAlert({
         type: "error",
-        message: err instanceof Error ? err.message : "Unable to update country settings",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Unable to update country settings",
       });
     }
   };
@@ -315,17 +367,15 @@ export default function ClientDetailPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-500">
-        Loading client...
-      </div>
-    );
+    return <PageLoadingSpinner text="Loading client..." />;
   }
 
   if (error || !client) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4 px-4 text-center">
-        <p className="text-red-600 font-medium">{error || "Client unavailable"}</p>
+        <p className="text-red-600 font-medium">
+          {error || "Client unavailable"}
+        </p>
         <button
           onClick={() => router.push("/clients")}
           className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -351,9 +401,13 @@ export default function ClientDetailPage() {
               <span>/</span>
               <span>{client.name}</span>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mt-2">{client.name}</h1>
+            <h1 className="text-4xl font-bold text-gray-900 mt-2">
+              {client.name}
+            </h1>
             {client.industry && (
-              <p className="text-indigo-600 font-medium mt-1">{client.industry}</p>
+              <p className="text-indigo-600 font-medium mt-1">
+                {client.industry}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-3">
@@ -364,7 +418,8 @@ export default function ClientDetailPage() {
             >
               {activeClientId === client.id ? (
                 <>
-                  <CheckCircleIcon className="w-4 h-4 text-green-500" /> Active client
+                  <CheckCircleIcon className="w-4 h-4 text-green-500" /> Active
+                  client
                 </>
               ) : savingActive ? (
                 "Setting..."
@@ -377,7 +432,8 @@ export default function ClientDetailPage() {
               disabled={deleting}
               className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
             >
-              <TrashIcon className="w-4 h-4" /> {deleting ? "Deleting..." : "Delete"}
+              <TrashIcon className="w-4 h-4" />{" "}
+              {deleting ? "Deleting..." : "Delete"}
             </button>
           </div>
         </div>
@@ -391,9 +447,12 @@ export default function ClientDetailPage() {
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">SqualoMail integration</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                SqualoMail integration
+              </h2>
               <p className="text-sm text-gray-500">
-                Connect this client&apos;s SqualoMail account to fetch mailing lists per country and deliver campaigns directly.
+                Connect this client&apos;s SqualoMail account to fetch mailing
+                lists per country and deliver campaigns directly.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -431,11 +490,14 @@ export default function ClientDetailPage() {
               ) : (
                 <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" />
               )}
-              <span>Status: {integration ? integration.status : "Not connected"}</span>
+              <span>
+                Status: {integration ? integration.status : "Not connected"}
+              </span>
             </div>
             {integration?.lastSyncedAt && (
               <p className="mt-2">
-                Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
+                Last synced:{" "}
+                {new Date(integration.lastSyncedAt).toLocaleDateString("de-DE")}
               </p>
             )}
           </div>
@@ -446,9 +508,12 @@ export default function ClientDetailPage() {
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Country configuration</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Country configuration
+              </h2>
               <p className="text-sm text-gray-500">
-                Toggle the countries you plan to target and map each one to a SqualoMail list.
+                Toggle the countries you plan to target and map each one to a
+                SqualoMail list.
               </p>
             </div>
           </div>
@@ -476,8 +541,12 @@ export default function ClientDetailPage() {
                   return (
                     <tr key={country.id} className="align-top">
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        <div className="font-medium">{country.country?.name || country.countryCode}</div>
-                        <div className="text-xs text-gray-500">{country.countryCode}</div>
+                        <div className="font-medium">
+                          {country.country?.name || country.countryCode}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {country.countryCode}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <label className="inline-flex items-center gap-2 text-gray-600">
@@ -488,18 +557,23 @@ export default function ClientDetailPage() {
                               updateCountry(
                                 country.countryCode,
                                 { isActive: !country.isActive },
-                                `${country.country?.name || country.countryCode} updated`
+                                `${
+                                  country.country?.name || country.countryCode
+                                } updated`
                               )
                             }
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                           />
-                          <span>{country.isActive ? "Active" : "Inactive"}</span>
+                          <span>
+                            {country.isActive ? "Active" : "Inactive"}
+                          </span>
                         </label>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {mailingLists.length === 0 ? (
                           <p className="text-xs text-gray-400">
-                            Connect SqualoMail and refresh lists to enable selection.
+                            Connect SqualoMail and refresh lists to enable
+                            selection.
                           </p>
                         ) : (
                           <div className="max-w-xs">
@@ -512,9 +586,13 @@ export default function ClientDetailPage() {
                                   {
                                     mailingListId: selected || null,
                                     mailingListName:
-                                      mailingLists.find((list) => list.id === selected)?.name ?? null,
+                                      mailingLists.find(
+                                        (list) => list.id === selected
+                                      )?.name ?? null,
                                   },
-                                  selected ? "Mailing list saved" : "Mailing list cleared"
+                                  selected
+                                    ? "Mailing list saved"
+                                    : "Mailing list cleared"
                                 )
                               }
                               placeholder="Select mailing list"
@@ -542,7 +620,9 @@ export default function ClientDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">Connect SqualoMail</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Connect SqualoMail
+              </h2>
               <button
                 onClick={() => setIntegrationModalOpen(false)}
                 className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
@@ -550,7 +630,10 @@ export default function ClientDetailPage() {
                 <XMarkIcon className="w-4 h-4" />
               </button>
             </div>
-            <form className="mt-6 space-y-4" onSubmit={handleConnectIntegration}>
+            <form
+              className="mt-6 space-y-4"
+              onSubmit={handleConnectIntegration}
+            >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   SqualoMail API key
@@ -593,10 +676,3 @@ export default function ClientDetailPage() {
     </div>
   );
 }
-
-
-
-
-
-
-

@@ -24,6 +24,9 @@ async function translateTextToEnglish(text: string | null | undefined) {
     return text ?? "";
   }
 
+  const startTime = Date.now();
+  console.log("[PERF] 🌐 Starting text translation to English...");
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-2024-11-20",
@@ -42,9 +45,12 @@ async function translateTextToEnglish(text: string | null | undefined) {
     });
 
     const output = completion.choices[0]?.message?.content?.trim();
+    const duration = Date.now() - startTime;
+    console.log(`[PERF] ✅ Text translation completed in ${duration}ms`);
     return output && output.length > 0 ? output : text ?? "";
   } catch (error) {
-    console.error("Failed to translate text to English", error);
+    const duration = Date.now() - startTime;
+    console.error(`[PERF] ❌ Text translation failed after ${duration}ms`, error);
     return text ?? "";
   }
 }
@@ -54,6 +60,9 @@ async function translateHtmlToEnglish(html: string) {
   if (!trimmed) {
     return html;
   }
+
+  const startTime = Date.now();
+  console.log(`[PERF] 🌐 Starting HTML translation to English (${trimmed.length} chars)...`);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -79,9 +88,12 @@ Important rules:
     });
 
     const output = completion.choices[0]?.message?.content?.trim();
+    const duration = Date.now() - startTime;
+    console.log(`[PERF] ✅ HTML translation completed in ${duration}ms`);
     return output && output.length > 0 ? output : html;
   } catch (error) {
-    console.error("Failed to translate HTML to English", error);
+    const duration = Date.now() - startTime;
+    console.error(`[PERF] ❌ HTML translation failed after ${duration}ms`, error);
     return html;
   }
 }
@@ -91,8 +103,14 @@ async function buildPreviewTemplate(template: { html: string; subject?: string |
     return null;
   }
 
+  const startTime = Date.now();
+  console.log("[PERF] 🔄 Building preview template with translations...");
+
   const subject = await translateTextToEnglish(template.subject ?? "");
   const html = await translateHtmlToEnglish(template.html ?? "");
+
+  const duration = Date.now() - startTime;
+  console.log(`[PERF] ✅ Preview template built in ${duration}ms`);
 
   return {
     ...template,
@@ -102,11 +120,15 @@ async function buildPreviewTemplate(template: { html: string; subject?: string |
 }
 
 export async function POST(request: Request) {
+  const requestStartTime = Date.now();
+  console.log("\n[PERF] 🚀 ========== NEW SCRAPE REQUEST ==========");
+
   try {
     const session = await getServerSession(authOptions);
     const body = await request.json();
 
     const { url, templateType, isTest, countryUrls } = body ?? {};
+    console.log(`[PERF] 📝 Request params: ${JSON.stringify({ hasCountryUrls: !!countryUrls, isTest, templateType: templateType?.name })}`);
 
     const hasCountryPayload =
       countryUrls &&
@@ -190,9 +212,15 @@ export async function POST(request: Request) {
         }
       > = {};
 
+      // OPTIMIZATION: Process URLs in parallel with logging
+      const urlProcessingStart = Date.now();
+      console.log(`[PERF] 🔄 Processing ${entries.length} countries in parallel...`);
+
       await Promise.all(
         entries.map(async (entry) => {
+          const countryStart = Date.now();
           if (entry.urls.length > 1) {
+            console.log(`[PERF] 🌍 ${entry.countryCode}: Processing ${entry.urls.length} URLs (MULTI)...`);
             const multiProductInfo = await processMultipleUrls(
               entry.urls,
               effectiveTemplate
@@ -202,7 +230,9 @@ export async function POST(request: Request) {
               multiProductInfo,
               type: "MULTI",
             };
+            console.log(`[PERF] ✅ ${entry.countryCode}: Completed in ${Date.now() - countryStart}ms`);
           } else {
+            console.log(`[PERF] 🌍 ${entry.countryCode}: Processing 1 URL (SINGLE)...`);
             const productInfo = await processSingleUrl(
               entry.urls[0],
               effectiveTemplate
@@ -212,9 +242,12 @@ export async function POST(request: Request) {
               productInfo,
               type: "SINGLE",
             };
+            console.log(`[PERF] ✅ ${entry.countryCode}: Completed in ${Date.now() - countryStart}ms`);
           }
         })
       );
+
+      console.log(`[PERF] ✅ All countries processed in ${Date.now() - urlProcessingStart}ms`);
 
       const primaryResult = countryResults[primaryEntry.countryCode];
 
@@ -228,6 +261,9 @@ export async function POST(request: Request) {
       try {
         let emailTemplate;
         let productInfoForResponse: any;
+
+        const templateGenStart = Date.now();
+        console.log(`[PERF] 🎨 Generating email template (${hasMultiProductCountry ? 'MULTI' : 'SINGLE'} product)...`);
 
         if (hasMultiProductCountry) {
           const multiProductInfo = primaryResult?.multiProductInfo;
@@ -255,10 +291,15 @@ export async function POST(request: Request) {
           productInfoForResponse = productInfo;
         }
 
+        console.log(`[PERF] ✅ Email template generated in ${Date.now() - templateGenStart}ms`);
+
         wasSuccessful = true;
         const generationTime = Date.now() - startTime;
 
         if (dbPrompt && userId) {
+          const dbStart = Date.now();
+          console.log("[PERF] 💾 Saving to database...");
+
           await prisma.templateGeneration.create({
             data: {
               promptId: dbPrompt.id,
@@ -280,9 +321,14 @@ export async function POST(request: Request) {
               },
             },
           });
+
+          console.log(`[PERF] ✅ Database save completed in ${Date.now() - dbStart}ms`);
         }
 
         const previewTemplate = await buildPreviewTemplate(emailTemplate);
+
+        const totalDuration = Date.now() - requestStartTime;
+        console.log(`[PERF] 🎉 ========== REQUEST COMPLETED in ${totalDuration}ms ==========\n`);
 
         return NextResponse.json({
           productInfo: productInfoForResponse,
@@ -418,8 +464,6 @@ export async function POST(request: Request) {
           });
         }
 
-        console.log(productInfo, template);
-
         const previewTemplate = await buildPreviewTemplate(template);
 
         return NextResponse.json({
@@ -467,126 +511,140 @@ async function processSingleUrl(
   url: string,
   templateType: TemplateType
 ): Promise<ProductInfo> {
+  const startTime = Date.now();
+  console.log(`[PERF] 🔗 Fetching URL: ${url.substring(0, 80)}...`);
+
   // Validate template type
   if (!templateType?.name || !templateType?.description) {
     throw new Error("Invalid template type provided");
   }
 
-  // Fetch the HTML content to extract information with Cheerio
-  const { data } = await axios.get(url);
+  // OPTIMIZATION: Add timeout and headers for faster scraping
+  const fetchStart = Date.now();
+  const { data } = await axios.get(url, {
+    timeout: 15000, // 15 second timeout
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; TemplAIto/1.0)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate',
+      'Connection': 'keep-alive',
+    }
+  });
+  console.log(`[PERF] ✅ URL fetched in ${Date.now() - fetchStart}ms (${data.length} bytes)`);
+
+  const parseStart = Date.now();
   const $ = cheerio.load(data);
+  console.log(`[PERF] ✅ HTML parsed in ${Date.now() - parseStart}ms`);
 
-  // Extract body content first
-  const bodyHtml = $("body").html() || "";
-  const $body = cheerio.load(bodyHtml);
-
-  // Try to extract only relevant sections first
-  let fullContent = "";
+  // OPTIMIZATION: More aggressive content filtering for faster AI processing
 
   // Remove unnecessary elements that might bloat the content
-  $body("script, style, nav, footer, .nav, .footer, .sidebar, .advertisement, .ads").remove();
+  $("script, style, nav, footer, header, .nav, .footer, .header, .sidebar, .advertisement, .ads, .cookie, .popup, .modal, .overlay").remove();
 
-  // Look for main content areas
-  const mainContent = $body("main, .main, .content, .product, .product-details, .product-info").html();
-  if (mainContent) {
-    fullContent = mainContent;
-  } else {
-    // Fallback to body content
-    fullContent = $body.html() || "";
+  // Extract structured data first (faster than parsing full HTML)
+  const structuredData = {
+    title: $('title').text() || $('h1').first().text() || '',
+    description: $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '',
+    ogImage: $('meta[property="og:image"]').attr('content') || '',
+    price: $('[class*="price"], [data-price], .cost, .amount').first().text() || '',
+    images: [] as string[]
+  };
+
+  // Collect images more efficiently
+  $('img[src*="product"], img[src*="item"], .product img, .gallery img, [class*="product"] img').each((i, el) => {
+    const src = $(el).attr('src');
+    if (src && !src.includes('icon') && !src.includes('logo') && structuredData.images.length < 10) {
+      structuredData.images.push(src.startsWith('http') ? src : new URL(src, url).href);
+    }
+  });
+
+  // Try to extract only relevant sections with more specific selectors
+  let fullContent = "";
+  const productSelectors = [
+    'main, .main, .content, .product, .product-details, .product-info, .item-info, .product-page',
+    '[class*="product"], [id*="product"], [class*="item"], [id*="item"]',
+    '.description, .details, .info, .summary'
+  ];
+
+  for (const selector of productSelectors) {
+    const content = $(selector).first().text();
+    if (content && content.length > fullContent.length) {
+      fullContent = content;
+    }
   }
 
-  // Truncate content if it's too long (limit to ~100k tokens)
-  const maxLength = 100000; // Conservative limit
+  // Fallback to body content if nothing specific found
+  if (!fullContent) {
+    fullContent = $("body").text() || "";
+  }
+
+  // OPTIMIZATION: More aggressive truncation for faster AI processing (50k vs 100k)
+  const maxLength = 50000; // Reduced from 100k for faster processing
   if (fullContent.length > maxLength) {
     fullContent = fullContent.substring(0, maxLength) + "... [content truncated]";
   }
 
-  // Extract all information including best image in one OpenAI call
+  // OPTIMIZATION: Use structured data when available, shorter AI prompt
+
+  const extractionStart = Date.now();
+  console.log(`[PERF] 🤖 Calling OpenAI for product extraction (content: ${fullContent.length} chars)...`);
+
   let extractionResponse;
   try {
     extractionResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.1, // Lower temperature for faster, more consistent results
+      max_tokens: 1000, // Limit response size for faster processing
       messages: [
         {
           role: "system",
-          content:
-            "You are an expert in e-commerce product information extraction. Analyze the provided webpage content and extract product information including the best product image and all available product images. Be precise and only extract actual product information, not navigation or footer content. Pay special attention to finding the correct prices and the best product image.",
+          content: "Extract e-commerce product info from webpage content. Return only JSON with required fields.",
         },
         {
           role: "user",
-          content: `Analyze this webpage content and extract the following information. Pay special attention to prices and look for both original and discounted prices. Also find the best product image URL and all available product images.
+          content: `Extract product info from this content. Use structured data when available:
 
-Content: "${fullContent}"
+Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
 
-Please return a JSON object with:
+Content: "${fullContent.length > 20000 ? fullContent.substring(0, 20000) + '...[truncated]' : fullContent}"
+
+Return JSON:
 {
-    "language": "ISO language code (e.g., 'en', 'es', 'fr', 'de', 'sr', 'hr', etc.)",
-    "title": "Product title/name",
-    "description": "Product description (max 200 characters)",
-    "regularPrice": "Regular/original price (if found)",
-    "salePrice": "Sale/discounted price (if found)",
-    "discount": "Discount percentage or amount (if found)",
-    "bestImageUrl": "URL of the best product image (prefer OG images, then gallery images, avoid logos/icons)",
-    "allImages": ["array of all product image URLs found (gallery images, product photos, etc.)"]
+  "language": "ISO code (en/es/fr/de/hr/etc)",
+  "title": "Product name",
+  "description": "Brief description (max 200 chars)",
+  "regularPrice": "Original price",
+  "salePrice": "Sale price",
+  "discount": "Discount amount",
+  "bestImageUrl": "Best product image URL (prefer OG image)",
+  "allImages": ["product image URLs (max 10)"]
 }
 
-Instructions:
-- For language: detect the primary language of the content
-- For title: find the main product name/title
-- For description: find the product description
-- For prices: carefully analyze the content to find:
-  * Original/regular price (often crossed out or labeled as 'regular price')
-  * Sale/current price (usually more prominent)
-  * Any discount percentage or amount
-- For bestImageUrl: look for:
-  * First priority: Open Graph images (og:image meta tags)
-  * Second priority: Product gallery images (main product photos)
-  * Avoid: logos, icons, navigation images
-  * Return full URL (convert relative URLs to absolute)
-- For allImages: find all product-related images including:
-  * Gallery images
-  * Product photos
-  * Thumbnail images
-  * Avoid: logos, icons, navigation images, social media icons
-  * Return full URLs (convert relative URLs to absolute)
-  * Remove duplicates
-- If any information is not found, return empty string for that field
-- Be precise and extract only actual product information`,
+Use structured data above when available. Return full URLs only.`,
         },
       ],
       response_format: { type: "json_object" },
     });
   } catch (error: any) {
-    // If token limit exceeded, try with gpt-4o-mini and shorter content
+    // If token limit exceeded, try with much shorter content
     if (error.code === 'context_length_exceeded') {
-      // Further truncate content
-      const shorterContent = fullContent.substring(0, 50000) + "... [content further truncated]";
+      const shorterContent = fullContent.substring(0, 10000) + "... [truncated]";
 
       extractionResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
+        temperature: 0.1,
+        max_tokens: 500,
         messages: [
           {
             role: "system",
-            content:
-              "You are an expert in e-commerce product information extraction. Extract key product information from the provided content.",
+            content: "Extract product info from content. Return JSON only.",
           },
           {
             role: "user",
-            content: `Extract product information from this content:
+            content: `Content: "${shorterContent}"
 
-Content: "${shorterContent}"
-
-Return JSON:
-{
-    "language": "ISO language code",
-    "title": "Product title",
-    "description": "Product description (max 200 chars)",
-    "regularPrice": "Regular price",
-    "salePrice": "Sale price", 
-    "discount": "Discount",
-    "bestImageUrl": "Best product image URL",
-    "allImages": ["array of product image URLs"]
-}`,
+Return: {"language": "en", "title": "", "description": "", "regularPrice": "", "salePrice": "", "discount": "", "bestImageUrl": "", "allImages": []}`,
           },
         ],
         response_format: { type: "json_object" },
@@ -596,21 +654,26 @@ Return JSON:
     }
   }
 
+  console.log(`[PERF] ✅ Product extraction completed in ${Date.now() - extractionStart}ms`);
+
   const extractedData = JSON.parse(
     extractionResponse.choices[0].message.content || "{}"
   );
 
-  // Create product info object with extracted data
+  // OPTIMIZATION: Use structured data as fallback when AI extraction fails
   const productInfo: ProductInfo = {
-    title: extractedData.title || "Product Title",
-    description: extractedData.description || "Product Description",
-    images: extractedData.allImages || [], // All available images
+    title: extractedData.title || structuredData.title || "Product Title",
+    description: extractedData.description || structuredData.description || "Product Description",
+    images: extractedData.allImages || structuredData.images || [], // All available images
     language: extractedData.language || "en",
-    bestImageUrl: extractedData.bestImageUrl || "",
-    regularPrice: extractedData.regularPrice || "",
+    bestImageUrl: extractedData.bestImageUrl || structuredData.ogImage || "",
+    regularPrice: extractedData.regularPrice || structuredData.price || "",
     salePrice: extractedData.salePrice || "",
     discount: extractedData.discount || "",
   };
+
+  const totalTime = Date.now() - startTime;
+  console.log(`[PERF] ✅ processSingleUrl completed in ${totalTime}ms (${productInfo.title})`);
 
   return productInfo;
 }
@@ -668,45 +731,36 @@ async function generateEmailTemplate(
   } else {
     // Handle single product template with dynamic AI engine selection
     const singleProductInfo = productInfo as ProductInfo;
+
     // Step 1: OpenAI generates the email content/copy
+    const copyStart = Date.now();
+    console.log(`[PERF] ✍️ Generating email copy with OpenAI...`);
+
     const contentResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.2, // Slightly higher for creative copy
+      max_tokens: 1500, // Limit for faster response
       messages: [
         {
           role: "system",
-          content: `You are an expert email marketing copywriter. Write the email in ${singleProductInfo.language} language. Create compelling email content based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.`,
+          content: `Email copywriter. Write in ${singleProductInfo.language}. Return JSON with subject, headline, bodyText, ctaText, preheader.`,
         },
         {
           role: "user",
-          content: `${templateType.user
-            .replace(/\{\{product_name\}\}/g, singleProductInfo.title)
-            .replace(/\{\{product_link\}\}/g, urls[0])
-            .replace(/\{\{image_url\}\}/g, singleProductInfo.bestImageUrl)
-            .replace(/\{\{regular_price\}\}/g, singleProductInfo.regularPrice)
-            .replace(/\{\{sale_price\}\}/g, singleProductInfo.salePrice)
-            .replace(/\{\{discount\}\}/g, singleProductInfo.discount)
-            .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
-                    
-                    Product details:
-                    Product Name: ${singleProductInfo.title}
-                    Description: ${singleProductInfo.description}
-                    Product URL: ${urls[0]}
-                    Image URL: ${singleProductInfo.bestImageUrl}
-                    Regular Price: ${singleProductInfo.regularPrice}
-                    Sale Price: ${singleProductInfo.salePrice}
-                    Discount: ${singleProductInfo.discount}
-                    
-                    Generate email content in ${singleProductInfo.language
-            } language.
-                    
-                    Please return a JSON object with:
-                    {
-                        "subject": "Email subject line",
-                        "headline": "Main headline",
-                        "bodyText": "Main body text/description",
-                        "ctaText": "Call to action button text",
-                        "preheader": "Email preheader text"
-                    }`,
+          content: `Product: ${singleProductInfo.title}
+Price: ${singleProductInfo.salePrice || singleProductInfo.regularPrice}
+${singleProductInfo.discount ? `Discount: ${singleProductInfo.discount}` : ''}
+
+Template: ${templateType.name}
+
+Return JSON:
+{
+  "subject": "Email subject line",
+  "headline": "Main headline",
+  "bodyText": "Body text",
+  "ctaText": "CTA text",
+  "preheader": "Preheader text"
+}`,
         },
       ],
       response_format: { type: "json_object" },
@@ -715,13 +769,22 @@ async function generateEmailTemplate(
     const emailContent = JSON.parse(
       contentResponse.choices[0].message.content || "{}"
     );
+    console.log(`[PERF] ✅ Email copy generated in ${Date.now() - copyStart}ms`);
 
     // Step 2: Generate HTML design using the specified AI engine
+    const designStart = Date.now();
+    const engineName = templateType.designEngine === 'GPT4O' ? 'GPT-4o' : 'Claude Sonnet';
+    console.log(`[PERF] 🎨 Generating HTML design with ${engineName}...`);
+
+    let result;
     if (templateType.designEngine === 'GPT4O') {
-      return await generateWithGPT4O(emailContent, singleProductInfo, urls[0], templateType);
+      result = await generateWithGPT4O(emailContent, singleProductInfo, urls[0], templateType);
     } else {
-      return await generateWithClaude(emailContent, singleProductInfo, urls[0], templateType);
+      result = await generateWithClaude(emailContent, singleProductInfo, urls[0], templateType);
     }
+    console.log(`[PERF] ✅ HTML design generated in ${Date.now() - designStart}ms`);
+
+    return result;
   }
 }
 
@@ -731,8 +794,6 @@ async function generateWithGPT4O(
   productUrl: string,
   templateType: any
 ) {
-  console.log(emailContent);
-
   const designResponse = await openai.chat.completions.create({
     model: "gpt-4o-2024-11-20",         // <- pin snapshot
     temperature: 0.2,                   // a touch of creativity for design

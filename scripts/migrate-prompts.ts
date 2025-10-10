@@ -4,7 +4,6 @@ import { promptTypes } from '../src/app/utils/promptTypes';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🚀 Starting prompt migration...');
 
   // First, let's check if we have any admin users
   const adminUsers = await prisma.user.findMany({
@@ -13,16 +12,8 @@ async function main() {
     }
   });
 
-  if (adminUsers.length === 0) {
-    console.log('⚠️  No admin users found. Creating system admin...');
-    // For migration purposes, we'll use system as creator
-    // In production, you should update this to a real admin user ID
-  }
-
   // Get the first admin user or create a system identifier
   const createdBy = adminUsers[0]?.id || 'system-migration';
-
-  console.log('📝 Migrating existing prompts from promptTypes.ts...');
 
   const migratedPrompts = [];
 
@@ -62,27 +53,11 @@ async function main() {
       });
 
       migratedPrompts.push(prompt);
-      console.log(`✅ Migrated: ${promptType.name}`);
 
     } catch (error) {
       console.error(`❌ Failed to migrate ${promptType.name}:`, error);
     }
   }
-
-  console.log(`\n🎉 Migration complete! Migrated ${migratedPrompts.length} prompts:`);
-  migratedPrompts.forEach((prompt, index) => {
-    console.log(`${index + 1}. ${prompt.name} (${prompt.color})`);
-  });
-
-  console.log('\n📊 Migration Summary:');
-  console.log(`   Total prompts: ${migratedPrompts.length}`);
-  console.log(`   All prompts set as ACTIVE and default`);
-  console.log(`   All prompts use CLAUDE engine by default`);
-
-  console.log('\n🎯 Next steps:');
-  console.log('1. Update an existing user to admin: UPDATE User SET isAdmin = true WHERE email = "your-email@domain.com"');
-  console.log('2. Update prompt creators: UPDATE Prompt SET createdBy = "actual-admin-user-id" WHERE createdBy = "system-migration"');
-  console.log('3. Access the admin panel at /admin/prompts');
 }
 
 main()
