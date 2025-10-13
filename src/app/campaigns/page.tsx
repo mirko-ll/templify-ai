@@ -658,183 +658,173 @@ function CampaignsPageContent() {
             ) : null}
 
             {activeClientId && !loading && campaigns.length > 0 ? (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {campaigns.map((campaign) => {
                   const statusConfig = currentStatusStyles(campaign.status);
                   return (
                     <div
                       key={campaign.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg"
+                      className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="flex-1 space-y-3">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-xl font-semibold text-slate-900">
+                      {/* Header Row */}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold text-slate-900 truncate">
                               {campaign.name}
                             </h3>
                             <span
-                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${statusConfig.className}`}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusConfig.className}`}
                             >
                               <span
-                                className={`h-2 w-2 rounded-full ${statusConfig.dot}`}
+                                className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`}
                               />
                               {statusConfig.label}
                             </span>
                           </div>
-                          {campaign.description && (
-                            <p className="text-sm text-slate-500">
-                              {campaign.description}
-                            </p>
-                          )}
-                          <dl className="grid gap-4 text-xs text-slate-500 sm:grid-cols-3">
-                            <div>
-                              <dt className="font-medium uppercase tracking-wide text-slate-400">
-                                Created
-                              </dt>
-                              <dd className="text-sm text-slate-700">
-                                {formatDateTime(campaign.createdAt)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="font-medium uppercase tracking-wide text-slate-400">
-                                Scheduled
-                              </dt>
-                              <dd className="text-sm text-slate-700">
+
+                          {/* Compact date info */}
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            <span className="inline-flex items-center gap-1">
+                              <ClockIcon className="h-3.5 w-3.5" />
+                              {formatDateTime(campaign.createdAt)}
+                            </span>
+                            {campaign.sentAt && (
+                              <span className="inline-flex items-center gap-1">
+                                <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500" />
+                                Sent {formatDateTime(campaign.sentAt)}
+                              </span>
+                            )}
+                            {!campaign.sentAt && campaign.scheduledAt && (
+                              <span className="inline-flex items-center gap-1">
+                                <ArrowPathIcon className="h-3.5 w-3.5 text-blue-500" />
                                 {formatDateTime(campaign.scheduledAt)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="font-medium uppercase tracking-wide text-slate-400">
-                                Sent
-                              </dt>
-                              <dd className="text-sm text-slate-700">
-                                {formatDateTime(campaign.sentAt)}
-                              </dd>
-                            </div>
-                          </dl>
+                              </span>
+                            )}
+                          </div>
                         </div>
+
                         <Link
                           href={`/clients/${activeClientId}`}
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
                         >
-                          Manage client
+                          Manage
                         </Link>
                       </div>
 
-                      <div className="mt-6 border-t border-slate-100 pt-6">
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="text-sm font-semibold text-slate-700">
-                            Country deliveries
-                          </h4>
-                          {metricsLoading && (
-                            <span className="text-xs text-slate-400">
-                              Refreshing metrics...
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
+                      {/* Country Metrics Row - Compact */}
+                      {campaign.countryTargets.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                          {/* Country Chips Row */}
+                          <div className="flex flex-wrap gap-2">
+                            {campaign.countryTargets.map((target) => {
+                              const stats = target.externalId
+                                ? metrics[target.externalId]
+                                : undefined;
+                              const isActive =
+                                activeTarget?.campaignId === campaign.id &&
+                                activeTarget.targetId === target.id;
+
+                              return (
+                                <button
+                                  key={target.id}
+                                  type="button"
+                                  onClick={() =>
+                                    toggleTargetMetrics(campaign.id, target.id)
+                                  }
+                                  className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                                    isActive
+                                      ? "border-indigo-300 bg-indigo-50 shadow-sm"
+                                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <span className="font-semibold text-slate-700">
+                                    {target.countryCode}
+                                  </span>
+                                  {stats ? (
+                                    <div className="flex items-center gap-2 text-[11px]">
+                                      <span className="text-emerald-600 font-semibold">
+                                        {formatPercentage(stats.openRate)}
+                                      </span>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="text-indigo-600 font-semibold">
+                                        {formatPercentage(stats.clickRate)}
+                                      </span>
+                                    </div>
+                                  ) : target.externalId ? (
+                                    <span className="text-slate-400 text-[11px]">
+                                      #{target.externalId}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                                      Draft
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Expanded Metrics - Rendered outside flex container */}
                           {campaign.countryTargets.map((target) => {
                             const isActive =
                               activeTarget?.campaignId === campaign.id &&
                               activeTarget.targetId === target.id;
+
+                            if (!isActive) return null;
+
+                            const stats = target.externalId
+                              ? metrics[target.externalId]
+                              : undefined;
+
+                            if (!stats) return null;
+
                             return (
-                              <button
-                                key={target.id}
-                                type="button"
-                                onClick={() =>
-                                  toggleTargetMetrics(campaign.id, target.id)
-                                }
-                                className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
-                                  isActive
-                                    ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow"
-                                    : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
-                                }`}
+                              <div
+                                key={`metrics-${target.id}`}
+                                className="mt-3 inline-grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-3 shadow-sm"
                               >
-                                <span>{target.countryCode}</span>
-                                <span className="text-[10px] font-normal text-slate-400">
-                                  {target.countryName ?? "Unknown"}
-                                </span>
-                                {target.externalId ? (
-                                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                                    #{target.externalId}
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-amber-500">
-                                    Draft
-                                  </span>
-                                )}
-                              </button>
+                                <div className="min-w-[100px]">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                                    Opens
+                                  </p>
+                                  <p className="mt-1 text-base font-bold text-emerald-600">
+                                    {formatPercentage(stats.openRate)}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400">
+                                    {formatCount(stats.openTotal)}
+                                  </p>
+                                </div>
+                                <div className="min-w-[100px]">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                                    Clicks
+                                  </p>
+                                  <p className="mt-1 text-base font-bold text-indigo-600">
+                                    {formatPercentage(stats.clickRate)}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400">
+                                    {formatCount(stats.clickTotal)}
+                                  </p>
+                                </div>
+                                <div className="min-w-[100px]">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                                    Sent
+                                  </p>
+                                  <p className="mt-1 text-base font-bold text-slate-700">
+                                    {formatCount(stats.sentTotal)}
+                                  </p>
+                                </div>
+                              </div>
                             );
                           })}
+
+                          {metricsLoading && (
+                            <p className="mt-2 text-[11px] text-slate-400 italic">
+                              Refreshing metrics...
+                            </p>
+                          )}
                         </div>
-                        {campaign.countryTargets.map((target) => {
-                          if (
-                            !(
-                              activeTarget?.campaignId === campaign.id &&
-                              activeTarget.targetId === target.id
-                            )
-                          ) {
-                            return null;
-                          }
-                          const stats = target.externalId
-                            ? metrics[target.externalId]
-                            : undefined;
-                          return (
-                            <div
-                              key={`metrics-${target.id}`}
-                              className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 shadow-inner sm:grid-cols-3"
-                            >
-                              {target.externalId && stats ? (
-                                <>
-                                  <div className="rounded-xl bg-white/80 p-4">
-                                    <p className="text-xs font-medium text-slate-500">
-                                      Open rate
-                                    </p>
-                                    <p className="mt-2 text-lg font-semibold text-emerald-600">
-                                      {formatPercentage(stats.openRate)}
-                                    </p>
-                                    <p className="text-[11px] text-slate-400">
-                                      {formatCount(stats.openTotal)} unique
-                                      opens
-                                    </p>
-                                  </div>
-                                  <div className="rounded-xl bg-white/80 p-4">
-                                    <p className="text-xs font-medium text-slate-500">
-                                      Click rate
-                                    </p>
-                                    <p className="mt-2 text-lg font-semibold text-indigo-600">
-                                      {formatPercentage(stats.clickRate)}
-                                    </p>
-                                    <p className="text-[11px] text-slate-400">
-                                      {formatCount(stats.clickTotal)} unique
-                                      clicks
-                                    </p>
-                                  </div>
-                                  <div className="rounded-xl bg-white/80 p-4">
-                                    <p className="text-xs font-medium text-slate-500">
-                                      Total sent
-                                    </p>
-                                    <p className="mt-2 text-lg font-semibold text-slate-700">
-                                      {formatCount(stats.sentTotal)}
-                                    </p>
-                                  </div>
-                                </>
-                              ) : target.externalId ? (
-                                <div className="rounded-xl bg-white/80 p-4 text-xs text-slate-500">
-                                  Metrics will appear once SqualoMail starts
-                                  tracking opens and clicks.
-                                </div>
-                              ) : (
-                                <div className="rounded-xl bg-white/80 p-4 text-xs text-slate-500">
-                                  Waiting for publication. Configure this
-                                  country and publish to SqualoMail to track
-                                  performance.
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      )}
                     </div>
                   );
                 })}

@@ -24,9 +24,6 @@ async function translateTextToEnglish(text: string | null | undefined) {
     return text ?? "";
   }
 
-  const startTime = Date.now();
-  console.log("[PERF] 🌐 Starting text translation to English...");
-
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-2024-11-20",
@@ -45,12 +42,9 @@ async function translateTextToEnglish(text: string | null | undefined) {
     });
 
     const output = completion.choices[0]?.message?.content?.trim();
-    const duration = Date.now() - startTime;
-    console.log(`[PERF] ✅ Text translation completed in ${duration}ms`);
     return output && output.length > 0 ? output : text ?? "";
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[PERF] ❌ Text translation failed after ${duration}ms`, error);
+    console.error("Text translation failed", error);
     return text ?? "";
   }
 }
@@ -60,9 +54,6 @@ async function translateHtmlToEnglish(html: string) {
   if (!trimmed) {
     return html;
   }
-
-  const startTime = Date.now();
-  console.log(`[PERF] 🌐 Starting HTML translation to English (${trimmed.length} chars)...`);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -88,12 +79,9 @@ Important rules:
     });
 
     const output = completion.choices[0]?.message?.content?.trim();
-    const duration = Date.now() - startTime;
-    console.log(`[PERF] ✅ HTML translation completed in ${duration}ms`);
     return output && output.length > 0 ? output : html;
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[PERF] ❌ HTML translation failed after ${duration}ms`, error);
+    console.error("HTML translation failed", error);
     return html;
   }
 }
@@ -103,14 +91,8 @@ async function buildPreviewTemplate(template: { html: string; subject?: string |
     return null;
   }
 
-  const startTime = Date.now();
-  console.log("[PERF] 🔄 Building preview template with translations...");
-
   const subject = await translateTextToEnglish(template.subject ?? "");
   const html = await translateHtmlToEnglish(template.html ?? "");
-
-  const duration = Date.now() - startTime;
-  console.log(`[PERF] ✅ Preview template built in ${duration}ms`);
 
   return {
     ...template,
@@ -120,15 +102,11 @@ async function buildPreviewTemplate(template: { html: string; subject?: string |
 }
 
 export async function POST(request: Request) {
-  const requestStartTime = Date.now();
-  console.log("\n[PERF] 🚀 ========== NEW SCRAPE REQUEST ==========");
-
   try {
     const session = await getServerSession(authOptions);
     const body = await request.json();
 
     const { url, templateType, isTest, countryUrls } = body ?? {};
-    console.log(`[PERF] 📝 Request params: ${JSON.stringify({ hasCountryUrls: !!countryUrls, isTest, templateType: templateType?.name })}`);
 
     const hasCountryPayload =
       countryUrls &&
@@ -212,15 +190,10 @@ export async function POST(request: Request) {
         }
       > = {};
 
-      // OPTIMIZATION: Process URLs in parallel with logging
-      const urlProcessingStart = Date.now();
-      console.log(`[PERF] 🔄 Processing ${entries.length} countries in parallel...`);
-
+      // Process URLs in parallel
       await Promise.all(
         entries.map(async (entry) => {
-          const countryStart = Date.now();
           if (entry.urls.length > 1) {
-            console.log(`[PERF] 🌍 ${entry.countryCode}: Processing ${entry.urls.length} URLs (MULTI)...`);
             const multiProductInfo = await processMultipleUrls(
               entry.urls,
               effectiveTemplate
@@ -230,9 +203,7 @@ export async function POST(request: Request) {
               multiProductInfo,
               type: "MULTI",
             };
-            console.log(`[PERF] ✅ ${entry.countryCode}: Completed in ${Date.now() - countryStart}ms`);
           } else {
-            console.log(`[PERF] 🌍 ${entry.countryCode}: Processing 1 URL (SINGLE)...`);
             const productInfo = await processSingleUrl(
               entry.urls[0],
               effectiveTemplate
@@ -242,12 +213,9 @@ export async function POST(request: Request) {
               productInfo,
               type: "SINGLE",
             };
-            console.log(`[PERF] ✅ ${entry.countryCode}: Completed in ${Date.now() - countryStart}ms`);
           }
         })
       );
-
-      console.log(`[PERF] ✅ All countries processed in ${Date.now() - urlProcessingStart}ms`);
 
       const primaryResult = countryResults[primaryEntry.countryCode];
 
@@ -261,9 +229,6 @@ export async function POST(request: Request) {
       try {
         let emailTemplate;
         let productInfoForResponse: any;
-
-        const templateGenStart = Date.now();
-        console.log(`[PERF] 🎨 Generating email template (${hasMultiProductCountry ? 'MULTI' : 'SINGLE'} product)...`);
 
         if (hasMultiProductCountry) {
           const multiProductInfo = primaryResult?.multiProductInfo;
@@ -291,15 +256,10 @@ export async function POST(request: Request) {
           productInfoForResponse = productInfo;
         }
 
-        console.log(`[PERF] ✅ Email template generated in ${Date.now() - templateGenStart}ms`);
-
         wasSuccessful = true;
         const generationTime = Date.now() - startTime;
 
         if (dbPrompt && userId) {
-          const dbStart = Date.now();
-          console.log("[PERF] 💾 Saving to database...");
-
           await prisma.templateGeneration.create({
             data: {
               promptId: dbPrompt.id,
@@ -321,14 +281,9 @@ export async function POST(request: Request) {
               },
             },
           });
-
-          console.log(`[PERF] ✅ Database save completed in ${Date.now() - dbStart}ms`);
         }
 
         const previewTemplate = await buildPreviewTemplate(emailTemplate);
-
-        const totalDuration = Date.now() - requestStartTime;
-        console.log(`[PERF] 🎉 ========== REQUEST COMPLETED in ${totalDuration}ms ==========\n`);
 
         return NextResponse.json({
           productInfo: productInfoForResponse,
@@ -511,16 +466,12 @@ async function processSingleUrl(
   url: string,
   templateType: TemplateType
 ): Promise<ProductInfo> {
-  const startTime = Date.now();
-  console.log(`[PERF] 🔗 Fetching URL: ${url.substring(0, 80)}...`);
-
   // Validate template type
   if (!templateType?.name || !templateType?.description) {
     throw new Error("Invalid template type provided");
   }
 
-  // OPTIMIZATION: Add timeout and headers for faster scraping
-  const fetchStart = Date.now();
+  // Add timeout and headers for faster scraping
   const { data } = await axios.get(url, {
     timeout: 15000, // 15 second timeout
     headers: {
@@ -531,11 +482,8 @@ async function processSingleUrl(
       'Connection': 'keep-alive',
     }
   });
-  console.log(`[PERF] ✅ URL fetched in ${Date.now() - fetchStart}ms (${data.length} bytes)`);
 
-  const parseStart = Date.now();
   const $ = cheerio.load(data);
-  console.log(`[PERF] ✅ HTML parsed in ${Date.now() - parseStart}ms`);
 
   // OPTIMIZATION: More aggressive content filtering for faster AI processing
 
@@ -585,10 +533,7 @@ async function processSingleUrl(
     fullContent = fullContent.substring(0, maxLength) + "... [content truncated]";
   }
 
-  // OPTIMIZATION: Use structured data when available, shorter AI prompt
-
-  const extractionStart = Date.now();
-  console.log(`[PERF] 🤖 Calling OpenAI for product extraction (content: ${fullContent.length} chars)...`);
+  // Use structured data when available, shorter AI prompt
 
   let extractionResponse;
   try {
@@ -654,13 +599,11 @@ Return: {"language": "en", "title": "", "description": "", "regularPrice": "", "
     }
   }
 
-  console.log(`[PERF] ✅ Product extraction completed in ${Date.now() - extractionStart}ms`);
-
   const extractedData = JSON.parse(
     extractionResponse.choices[0].message.content || "{}"
   );
 
-  // OPTIMIZATION: Use structured data as fallback when AI extraction fails
+  // Use structured data as fallback when AI extraction fails
   const productInfo: ProductInfo = {
     title: extractedData.title || structuredData.title || "Product Title",
     description: extractedData.description || structuredData.description || "Product Description",
@@ -671,9 +614,6 @@ Return: {"language": "en", "title": "", "description": "", "regularPrice": "", "
     salePrice: extractedData.salePrice || "",
     discount: extractedData.discount || "",
   };
-
-  const totalTime = Date.now() - startTime;
-  console.log(`[PERF] ✅ processSingleUrl completed in ${totalTime}ms (${productInfo.title})`);
 
   return productInfo;
 }
@@ -733,9 +673,6 @@ async function generateEmailTemplate(
     const singleProductInfo = productInfo as ProductInfo;
 
     // Step 1: OpenAI generates the email content/copy
-    const copyStart = Date.now();
-    console.log(`[PERF] ✍️ Generating email copy with OpenAI...`);
-
     const contentResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2, // Slightly higher for creative copy
@@ -769,20 +706,14 @@ Return JSON:
     const emailContent = JSON.parse(
       contentResponse.choices[0].message.content || "{}"
     );
-    console.log(`[PERF] ✅ Email copy generated in ${Date.now() - copyStart}ms`);
 
     // Step 2: Generate HTML design using the specified AI engine
-    const designStart = Date.now();
-    const engineName = templateType.designEngine === 'GPT4O' ? 'GPT-4o' : 'Claude Sonnet';
-    console.log(`[PERF] 🎨 Generating HTML design with ${engineName}...`);
-
     let result;
     if (templateType.designEngine === 'GPT4O') {
       result = await generateWithGPT4O(emailContent, singleProductInfo, urls[0], templateType);
     } else {
       result = await generateWithClaude(emailContent, singleProductInfo, urls[0], templateType);
     }
-    console.log(`[PERF] ✅ HTML design generated in ${Date.now() - designStart}ms`);
 
     return result;
   }
@@ -827,7 +758,6 @@ MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
 9. Ensure all images have proper alt text
 10. Use padding instead of margins where possible
 11. Links should always open in a new tab
-12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
 
 SPECIFIC DESIGN INSTRUCTIONS FROM TEMPLATE:
 ${templateType.user}
@@ -849,7 +779,7 @@ Example: {{product_image}} not appearing in the template means we do not have a 
 - Discount: ${productInfo.discount}
 - Link: ${productUrl}
 
-CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
+CRITICAL: For unsubscribe link, use EXACTLY this format: {unsubscribe}UNSUBSCRIBE{/unsubscribe} - do NOT use href attribute.
 
 REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`
       }
@@ -897,7 +827,6 @@ MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
 9. Ensure all images have proper alt text
 10. Use padding instead of margins where possible
 11. Links should always open in a new tab
-12. Include unsubscribe footer with 8px font size: "This message was sent to {{email_address}}. If you no longer wish to receive such messages, unsubscribe here {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}}" - DO NOT use href attribute, use the exact format shown
 
 TEMPLATE-SPECIFIC REQUIREMENTS:
 Template: ${templateType.name} - ${templateType.description}
@@ -921,7 +850,7 @@ Example: {{product_image}} not appearing in the template means we do not have a 
 - Discount: ${productInfo.discount}
 - Link: ${productUrl}
 
-CRITICAL: For unsubscribe link, use EXACTLY this format: {{unsubscribe}}UNSUBSCRIBE{{/unsubscribe}} - do NOT use href attribute.
+CRITICAL: For unsubscribe link, use EXACTLY this format: {unsubscribe}UNSUBSCRIBE{/unsubscribe} - do NOT use href attribute.
 
 REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`,
       },

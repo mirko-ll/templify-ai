@@ -27,6 +27,8 @@ async function getAuthorizedClient(clientId: string, userId: string) {
           isActive: true,
           mailingListId: true,
           mailingListName: true,
+          senderEmail: true,
+          senderName: true,
           lastSyncedAt: true,
           createdAt: true,
           updatedAt: true,

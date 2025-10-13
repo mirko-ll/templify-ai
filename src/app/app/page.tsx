@@ -946,13 +946,13 @@ export default function TemplaitoApp() {
                                     </div>
                                   </div>
 
-                                  <div className="space-y-3">
+                                  <div className="space-y-2.5">
                                     {entries.map((value, index) => (
                                       <div
                                         key={`${config.countryCode}-${index}`}
                                         className="relative group"
                                       >
-                                        <LinkIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                        <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
                                           type="url"
                                           value={value}
@@ -971,7 +971,7 @@ export default function TemplaitoApp() {
                                           placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}-${
                                             index + 1
                                           }`}
-                                          className="w-full pl-12 pr-12 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-500 duration-200 text-lg"
+                                          className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-700 duration-200 text-sm"
                                         />
                                         {entries.length > 1 && (
                                           <button
@@ -982,7 +982,7 @@ export default function TemplaitoApp() {
                                                 index
                                               )
                                             }
-                                            className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400 hover:text-red-500 transition-colors duration-200"
+                                            className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors duration-200 text-xl leading-none"
                                             title="Remove URL"
                                           >
                                             {"×"}
@@ -997,7 +997,7 @@ export default function TemplaitoApp() {
                                     onClick={() =>
                                       addCountryUrl(config.countryCode)
                                     }
-                                    className="mt-4 inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
+                                    className="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
                                   >
                                     <span className="text-base leading-none">
                                       +

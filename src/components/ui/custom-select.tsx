@@ -23,6 +23,7 @@ interface CustomSelectProps {
   hoverTo?: string;
   disabled?: boolean;
   dropdownPlacement?: "above" | "below";
+  size?: "sm" | "md";
 }
 
 export default function CustomSelect({
@@ -35,10 +36,11 @@ export default function CustomSelect({
   gradientTo = "indigo-50",
   borderColor = "blue-200",
   textColor = "blue-800",
-  hoverFrom = "blue-100", 
+  hoverFrom = "blue-100",
   hoverTo = "indigo-100",
   disabled = false,
-  dropdownPlacement = "below"
+  dropdownPlacement = "below",
+  size = "md"
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -70,6 +72,10 @@ export default function CustomSelect({
     setIsOpen(false);
   };
 
+  const sizeClasses = size === "sm"
+    ? "px-3 py-1 pr-8 text-xs"
+    : "px-4 py-2 pr-10 text-sm";
+
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
@@ -78,10 +84,10 @@ export default function CustomSelect({
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`
-          w-full appearance-none bg-gradient-to-r from-${gradientFrom} to-${gradientTo} 
-          border border-${borderColor} text-${textColor} px-4 py-2 pr-10 rounded-full 
-          focus:ring-2 focus:ring-${borderColor.split('-')[0]}-500 focus:border-transparent 
-          font-medium cursor-pointer hover:from-${hoverFrom} hover:to-${hoverTo} 
+          w-full appearance-none bg-gradient-to-r from-${gradientFrom} to-${gradientTo}
+          border border-${borderColor} text-${textColor} ${sizeClasses} rounded-full
+          focus:ring-2 focus:ring-${borderColor.split('-')[0]}-500 focus:border-transparent
+          font-medium cursor-pointer hover:from-${hoverFrom} hover:to-${hoverTo}
           transition-all duration-200 flex items-center justify-between
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           ${isOpen ? `ring-2 ring-${borderColor.split('-')[0]}-500` : ''}

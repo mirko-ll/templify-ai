@@ -4,14 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import CustomSelect from "@/components/ui/custom-select";
+import IntegrationCard from "@/components/integrations/IntegrationCard";
+import IntegrationTabs from "@/components/integrations/IntegrationTabs";
 import {
   ArrowLeftIcon,
-  ArrowPathIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon,
-  PlusIcon,
   TrashIcon,
   XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from "@heroicons/react/24/outline";
 import { PageLoadingSpinner } from "@/components/ui/loading-spinner";
 
@@ -32,6 +33,15 @@ interface ClientDetail {
     metadata?: unknown;
     lastSyncedAt?: string | null;
   }>;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    status: string;
+    scheduledAt?: string | null;
+    sentAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 }
 
 interface CountryConfig {
@@ -40,6 +50,8 @@ interface CountryConfig {
   isActive: boolean;
   mailingListId?: string | null;
   mailingListName?: string | null;
+  senderEmail?: string | null;
+  senderName?: string | null;
   lastSyncedAt?: string | null;
   country?: {
     code: string;
@@ -84,6 +96,7 @@ export default function ClientDetailPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [integrationAlert, setIntegrationAlert] = useState<Alert | null>(null);
   const [countryAlert, setCountryAlert] = useState<Alert | null>(null);
+  const [showAllCountries, setShowAllCountries] = useState(false);
 
   const request = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -386,233 +399,280 @@ export default function ClientDetailPage() {
     );
   }
 
+  const connectedIntegrations = integration ? 1 : 0;
+  const activeCountriesCount = countries.filter((c) => c.isActive).length;
+  const totalCampaigns = client.campaigns?.length || 0;
+
+  const displayedCountries = showAllCountries
+    ? countries
+    : countries.filter((c) => c.isActive);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 text-sm text-gray-500">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 text-sm text-slate-500">
               <Link
                 href="/clients"
-                className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700"
+                className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
               >
                 <ArrowLeftIcon className="w-4 h-4" /> Back to clients
               </Link>
               <span>/</span>
               <span>{client.name}</span>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mt-2">
-              {client.name}
-            </h1>
+            <div className="flex flex-wrap items-center gap-4 mt-2">
+              <h1 className="text-4xl font-bold text-slate-900">
+                {client.name}
+              </h1>
+              {activeClientId === client.id && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
+                  <CheckCircleIcon className="h-4 w-4" />
+                  Active Client
+                </span>
+              )}
+            </div>
             {client.industry && (
-              <p className="text-indigo-600 font-medium mt-1">
+              <p className="text-indigo-600 font-semibold mt-2">
                 {client.industry}
+              </p>
+            )}
+            {client.description && (
+              <p className="text-slate-600 mt-2 max-w-2xl">
+                {client.description}
               </p>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSetActive}
-              disabled={savingActive || activeClientId === client.id}
-              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-            >
-              {activeClientId === client.id ? (
-                <>
-                  <CheckCircleIcon className="w-4 h-4 text-green-500" /> Active
-                  client
-                </>
-              ) : savingActive ? (
-                "Setting..."
-              ) : (
-                "Set as active"
-              )}
-            </button>
+            {activeClientId !== client.id && (
+              <button
+                onClick={handleSetActive}
+                disabled={savingActive}
+                className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-60"
+              >
+                {savingActive ? "Setting..." : "Set as Active"}
+              </button>
+            )}
             <button
               onClick={handleDeleteClient}
               disabled={deleting}
-              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
+              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
             >
-              <TrashIcon className="w-4 h-4" />{" "}
+              <TrashIcon className="w-4 h-4" />
               {deleting ? "Deleting..." : "Delete"}
             </button>
           </div>
         </div>
 
-        {client.description && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm text-gray-600">
-            {client.description}
+        {/* Quick Stats Bar */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Integrations
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {connectedIntegrations}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Email service{connectedIntegrations !== 1 ? "s" : ""} connected
+            </p>
           </div>
-        )}
-
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                SqualoMail integration
-              </h2>
-              <p className="text-sm text-gray-500">
-                Connect this client&apos;s SqualoMail account to fetch mailing
-                lists per country and deliver campaigns directly.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={refreshMailingLists}
-                className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                <ArrowPathIcon className="w-4 h-4" /> Refresh lists
-              </button>
-              {integration ? (
-                <button
-                  onClick={handleDisconnectIntegration}
-                  className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 hover:bg-red-100"
-                >
-                  Disconnect
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    setIntegrationAlert(null);
-                    setIntegrationModalOpen(true);
-                  }}
-                  className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
-                >
-                  <PlusIcon className="w-4 h-4" /> Connect SqualoMail
-                </button>
-              )}
-            </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Active Countries
+            </p>
+            <p className="mt-2 text-3xl font-bold text-emerald-600">
+              {activeCountriesCount}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              of {countries.length} configured
+            </p>
           </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Campaigns
+            </p>
+            <p className="mt-2 text-3xl font-bold text-blue-600">
+              {totalCampaigns}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">Total campaigns sent</p>
+          </div>
+        </div>
 
-          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-            <div className="flex items-center gap-2">
-              {integration ? (
-                <CheckCircleIcon className="w-5 h-5 text-green-500" />
-              ) : (
-                <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" />
-              )}
-              <span>
-                Status: {integration ? integration.status : "Not connected"}
-              </span>
-            </div>
-            {integration?.lastSyncedAt && (
-              <p className="mt-2">
-                Last synced:{" "}
-                {new Date(integration.lastSyncedAt).toLocaleDateString("de-DE")}
-              </p>
-            )}
+        {/* Integration Cards Section */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Integrations</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Connect email service providers to manage campaigns
+            </p>
           </div>
 
           {renderAlert(integrationAlert)}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <IntegrationCard
+              provider="SQUALOMAIL"
+              integration={integration}
+              onConnect={() => {
+                setIntegrationAlert(null);
+                setIntegrationModalOpen(true);
+              }}
+              onDisconnect={handleDisconnectIntegration}
+              onRefresh={refreshMailingLists}
+            />
+            <IntegrationCard
+              provider="KLAVIYO"
+              integration={null}
+              onConnect={() => {}}
+              onDisconnect={() => {}}
+              onRefresh={() => {}}
+            />
+            <IntegrationCard
+              provider="MAILCHIMP"
+              integration={null}
+              onConnect={() => {}}
+              onDisconnect={() => {}}
+              onRefresh={() => {}}
+            />
+          </div>
         </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+        {/* Integration Configuration Tabs */}
+        {integration && (
+          <IntegrationTabs
+            integration={integration}
+            countries={countries}
+            onUpdateCountry={updateCountry}
+            onRefresh={refreshMailingLists}
+            onDisconnect={handleDisconnectIntegration}
+            renderAlert={renderAlert}
+            alert={integrationAlert}
+          />
+        )}
+
+        {/* Country Configuration Section */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                Country configuration
+              <h2 className="text-2xl font-bold text-slate-900">
+                Country Configuration
               </h2>
-              <p className="text-sm text-gray-500">
-                Toggle the countries you plan to target and map each one to a
-                SqualoMail list.
+              <p className="text-sm text-slate-600">
+                Enable countries and configure their settings
               </p>
             </div>
+            <button
+              onClick={() => setShowAllCountries(!showAllCountries)}
+              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              {showAllCountries ? (
+                <>
+                  <ChevronUpIcon className="h-4 w-4" />
+                  Show Active Only
+                </>
+              ) : (
+                <>
+                  <ChevronDownIcon className="h-4 w-4" />
+                  Show All Countries
+                </>
+              )}
+            </button>
           </div>
 
           {renderAlert(countryAlert)}
 
-          <div className="relative rounded-xl border border-gray-200 overflow-visible">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Country
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Mailing list
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {countries.map((country) => {
-                  const listId = country.mailingListId ?? "";
-                  return (
-                    <tr key={country.id} className="align-top">
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        <div className="font-medium">
-                          {country.country?.name || country.countryCode}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {country.countryCode}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <label className="inline-flex items-center gap-2 text-gray-600">
-                          <input
-                            type="checkbox"
-                            checked={country.isActive}
-                            onChange={() =>
-                              updateCountry(
-                                country.countryCode,
-                                { isActive: !country.isActive },
-                                `${
-                                  country.country?.name || country.countryCode
-                                } updated`
-                              )
-                            }
-                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <span>
-                            {country.isActive ? "Active" : "Inactive"}
-                          </span>
-                        </label>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {mailingLists.length === 0 ? (
-                          <p className="text-xs text-gray-400">
-                            Connect SqualoMail and refresh lists to enable
-                            selection.
-                          </p>
-                        ) : (
-                          <div className="max-w-xs">
-                            <CustomSelect
-                              options={mailingListOptions}
-                              value={listId}
-                              onChange={(selected) =>
-                                updateCountry(
-                                  country.countryCode,
-                                  {
-                                    mailingListId: selected || null,
-                                    mailingListName:
-                                      mailingLists.find(
-                                        (list) => list.id === selected
-                                      )?.name ?? null,
-                                  },
-                                  selected
-                                    ? "Mailing list saved"
-                                    : "Mailing list cleared"
-                                )
-                              }
-                              placeholder="Select mailing list"
-                              gradientFrom="white"
-                              gradientTo="gray-50"
-                              borderColor="gray-200"
-                              textColor="gray-700"
-                              hoverFrom="gray-100"
-                              hoverTo="gray-200"
-                              dropdownPlacement="above"
-                            />
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {displayedCountries.map((country) => {
+              const listId = country.mailingListId ?? "";
+              return (
+                <div
+                  key={country.id}
+                  className={`relative rounded-xl border p-4 transition ${
+                    country.isActive
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">
+                        {country.country?.name || country.countryCode}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {country.countryCode}
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={country.isActive}
+                        onChange={() =>
+                          updateCountry(
+                            country.countryCode,
+                            { isActive: !country.isActive },
+                            `${
+                              country.country?.name || country.countryCode
+                            } ${country.isActive ? "deactivated" : "activated"}`
+                          )
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                    </label>
+                  </div>
+
+                  {country.isActive && (
+                    <div className="mt-3">
+                      {mailingLists.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          No mailing lists available
+                        </p>
+                      ) : (
+                        <CustomSelect
+                          options={mailingListOptions}
+                          value={listId}
+                          onChange={(selected) =>
+                            updateCountry(
+                              country.countryCode,
+                              {
+                                mailingListId: selected || null,
+                                mailingListName:
+                                  mailingLists.find(
+                                    (list) => list.id === selected
+                                  )?.name ?? null,
+                              },
+                              selected
+                                ? "Mailing list saved"
+                                : "Mailing list cleared"
+                            )
+                          }
+                          placeholder="Select list"
+                          gradientFrom="white"
+                          gradientTo="emerald-50"
+                          borderColor="emerald-200"
+                          textColor="slate-700"
+                          hoverFrom="emerald-100"
+                          hoverTo="emerald-200"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+
+          {displayedCountries.length === 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
+              <p className="text-sm text-slate-500">
+                {showAllCountries
+                  ? "No countries configured"
+                  : "No active countries. Click 'Show All Countries' to configure."}
+              </p>
+            </div>
+          )}
         </section>
       </div>
 

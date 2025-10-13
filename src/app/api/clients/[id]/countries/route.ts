@@ -28,6 +28,8 @@ function serialize(config: any) {
     isActive: config.isActive,
     mailingListId: config.mailingListId,
     mailingListName: config.mailingListName,
+    senderEmail: config.senderEmail,
+    senderName: config.senderName,
     lastSyncedAt: config.lastSyncedAt,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt,
@@ -152,6 +154,20 @@ export async function PATCH(
           data.mailingListName = item.mailingListName
             ? item.mailingListName.trim()
             : null;
+        }
+
+        if (item.senderEmail !== undefined) {
+          if (item.senderEmail && typeof item.senderEmail !== "string") {
+            throw new Error("senderEmail must be a string");
+          }
+          data.senderEmail = item.senderEmail ? item.senderEmail.trim() : null;
+        }
+
+        if (item.senderName !== undefined) {
+          if (item.senderName && typeof item.senderName !== "string") {
+            throw new Error("senderName must be a string");
+          }
+          data.senderName = item.senderName ? item.senderName.trim() : null;
         }
 
         if (item.resetSyncedAt) {
