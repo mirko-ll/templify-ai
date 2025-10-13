@@ -4,10 +4,17 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 async function getAuthorizedClient(clientId: string, userId: string) {
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   return prisma.client.findFirst({
     where: {
       id: clientId,
-      userId,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
     },
     select: {
       id: true,
@@ -104,11 +111,19 @@ export async function PATCH(
   }
 
   const { id } = await params;
+  const userId = ((session as any).user as any).id as string;
+
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
 
   const existing = await prisma.client.findFirst({
     where: {
       id,
-      userId: ((session as any).user as any).id as string,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
     },
     select: { id: true },
   });
@@ -186,11 +201,19 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const userId = ((session as any).user as any).id as string;
+
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
 
   const existing = await prisma.client.findFirst({
     where: {
       id,
-      userId: ((session as any).user as any).id as string,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
     },
     select: { id: true },
   });

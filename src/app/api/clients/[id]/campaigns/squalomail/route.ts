@@ -8,10 +8,17 @@ import { IntegrationProvider, IntegrationStatus } from "@prisma/client";
 const PROVIDER = IntegrationProvider.SQUALOMAIL;
 
 async function ensureClientAccess(clientId: string, userId: string) {
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   const client = await prisma.client.findFirst({
     where: {
       id: clientId,
-      userId,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
       isArchived: false,
     },
     select: { id: true },

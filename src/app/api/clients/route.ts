@@ -10,18 +10,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const userId = ((session as any).user as any).id as string;
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search")?.trim();
 
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   const whereClause = {
-    userId: ((session as any).user as any).id as string,
+    // Only filter by userId if user is not an admin
+    ...(!user?.isAdmin ? { userId } : {}),
     isArchived: false,
     ...(search
       ? {
-          name: {
-            contains: search,
-          },
-        }
+        name: {
+          contains: search,
+        },
+      }
       : {}),
   };
 
@@ -56,6 +64,8 @@ export async function GET(request: NextRequest) {
       },
     },
   });
+
+  console.log("clients", clients);
 
   return NextResponse.json({ clients });
 }

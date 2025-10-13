@@ -34,10 +34,17 @@ function parseLimit(value: string | null, fallback = 50): number {
 }
 
 async function verifyClientOwnership(userId: string, clientId: string) {
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   return prisma.client.findFirst({
     where: {
       id: clientId,
-      userId,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
       isArchived: false,
     },
     select: {

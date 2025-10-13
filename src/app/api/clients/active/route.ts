@@ -11,10 +11,17 @@ async function ownsClient(userId: string, clientId: string) {
     return false;
   }
 
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   const client = await prisma.client.findFirst({
     where: {
       id: clientId,
-      userId,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
       isArchived: false,
     },
     select: { id: true },

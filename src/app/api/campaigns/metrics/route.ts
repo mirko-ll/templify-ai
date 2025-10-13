@@ -5,10 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { callTemplaitoBackend } from "@/lib/templaito-backend";
 
 async function ensureClientOwnership(userId: string, clientId: string) {
+  // Check if user is admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+
   return prisma.client.findFirst({
     where: {
       id: clientId,
-      userId,
+      // Only filter by userId if user is not an admin
+      ...(!user?.isAdmin ? { userId } : {}),
       isArchived: false,
     },
     select: { id: true },
