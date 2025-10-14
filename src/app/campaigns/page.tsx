@@ -142,6 +142,8 @@ function formatDateTime(value: string | null) {
     return "";
   }
 
+  // Display time in user's local timezone (browser's timezone)
+  // Removed hardcoded "Europe/Ljubljana" timezone to use user's local time
   return new Intl.DateTimeFormat("sl-SI", {
     day: "2-digit",
     month: "2-digit",
@@ -149,7 +151,6 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "Europe/Ljubljana",
   }).format(date);
 }
 

@@ -621,6 +621,17 @@ export default function TemplaitoApp() {
     setPublishError("");
 
     try {
+      // Convert datetime-local value to ISO string with timezone
+      // datetime-local returns "2025-10-14T15:30" which is in user's local time
+      // We need to send it as a full ISO string so the backend knows the timezone
+      let sendDateISO = null;
+      if (publishForm.sendDate) {
+        const localDate = new Date(publishForm.sendDate);
+        if (!isNaN(localDate.getTime())) {
+          sendDateISO = localDate.toISOString();
+        }
+      }
+
       const response = await fetch(
         `/api/clients/${activeClientId}/campaigns/squalomail`,
         {
@@ -632,7 +643,7 @@ export default function TemplaitoApp() {
             baseCountry,
             subject: publishForm.subject,
             preheader: publishForm.preheader,
-            sendDate: publishForm.sendDate || null,
+            sendDate: sendDateISO,
             emailTemplate: originalTemplate ?? template,
             countryResults: countryScrapeResults,
             imageOverrides: buildImageOverrides(),
