@@ -541,8 +541,9 @@ export default function ClientDetailPage() {
         </section>
 
         {/* Integration Configuration Tabs */}
-        {integration && (
+        {integration && clientId && (
           <IntegrationTabs
+            clientId={clientId}
             integration={integration}
             countries={countries}
             onUpdateCountry={updateCountry}

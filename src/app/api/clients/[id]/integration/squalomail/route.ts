@@ -200,6 +200,64 @@ export async function POST(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  const userId = ((session as any)?.user as any)?.id as string | undefined;
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const denial = await ensureClientAccess(id, userId);
+  if (denial) {
+    return denial;
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { utmMedium } = body || {};
+
+  // Get existing integration
+  const integration = await prisma.clientIntegration.findFirst({
+    where: {
+      clientId: id,
+      provider: PROVIDER,
+    },
+  });
+
+  if (!integration) {
+    return NextResponse.json({ error: "Integration not found" }, { status: 404 });
+  }
+
+  // Update metadata with UTM Medium
+  const existingMetadata =
+    integration.metadata && typeof integration.metadata === "object" && !Array.isArray(integration.metadata)
+      ? (integration.metadata as Record<string, unknown>)
+      : {};
+
+  const updatedIntegration = await prisma.clientIntegration.update({
+    where: { id: integration.id },
+    data: {
+      metadata: {
+        ...existingMetadata,
+        utmMedium: typeof utmMedium === "string" ? utmMedium.trim() : null,
+      },
+      updatedAt: new Date(),
+    },
+  });
+
+  return NextResponse.json({ integration: sanitizeIntegration(updatedIntegration) });
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

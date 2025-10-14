@@ -32,6 +32,7 @@ interface Integration {
 }
 
 interface IntegrationTabsProps {
+  clientId: string;
   integration: Integration | null;
   countries: CountryConfig[];
   onUpdateCountry: (
@@ -45,6 +46,19 @@ interface IntegrationTabsProps {
   alert: { type: "success" | "error"; message: string } | null;
 }
 
+async function updateIntegrationSettings(clientId: string, utmMedium: string): Promise<void> {
+  const response = await fetch(`/api/clients/${clientId}/integration/squalomail`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ utmMedium: utmMedium.trim() || null }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || "Failed to update settings");
+  }
+}
+
 type CountryFormData = {
   mailingListId: string;
   mailingListName: string;
@@ -53,6 +67,7 @@ type CountryFormData = {
 };
 
 export default function IntegrationTabs({
+  clientId,
   integration,
   countries,
   onUpdateCountry,
@@ -66,6 +81,11 @@ export default function IntegrationTabs({
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // UTM Medium state
+  const [utmMedium, setUtmMedium] = useState<string>("");
+  const [isUtmDirty, setIsUtmDirty] = useState(false);
+  const [isSavingUtm, setIsSavingUtm] = useState(false);
 
   const mailingLists =
     integration?.metadata && Array.isArray(integration.metadata.lists)
@@ -94,6 +114,16 @@ export default function IntegrationTabs({
     setFormData(initialData);
     setIsDirty(false);
   }, [countries]);
+
+  // Initialize UTM Medium from integration metadata
+  useEffect(() => {
+    if (integration?.metadata && typeof integration.metadata === "object") {
+      const metadata = integration.metadata as Record<string, unknown>;
+      const savedUtmMedium = typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
+      setUtmMedium(savedUtmMedium);
+      setIsUtmDirty(false);
+    }
+  }, [integration]);
 
   const updateFormField = (countryCode: string, field: keyof CountryFormData, value: string) => {
     setFormData((prev) => ({
@@ -153,6 +183,31 @@ export default function IntegrationTabs({
     });
     setFormData(initialData);
     setIsDirty(false);
+  };
+
+  const handleSaveUtmMedium = async () => {
+    if (!clientId) return;
+
+    setIsSavingUtm(true);
+    try {
+      await updateIntegrationSettings(clientId, utmMedium);
+      setIsUtmDirty(false);
+      // Trigger refresh to reload integration with updated metadata
+      await onRefresh();
+    } catch (error) {
+      console.error("Failed to save UTM Medium", error);
+    } finally {
+      setIsSavingUtm(false);
+    }
+  };
+
+  const handleDiscardUtmMedium = () => {
+    if (integration?.metadata && typeof integration.metadata === "object") {
+      const metadata = integration.metadata as Record<string, unknown>;
+      const savedUtmMedium = typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
+      setUtmMedium(savedUtmMedium);
+      setIsUtmDirty(false);
+    }
   };
 
   const tabs = [
@@ -278,6 +333,78 @@ export default function IntegrationTabs({
             </div>
 
             {renderAlert(alert)}
+
+            {/* UTM Medium Configuration */}
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900">
+                    UTM Tracking Configuration
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Configure UTM parameters for automatic link tracking in your campaigns
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isUtmDirty && (
+                    <>
+                      <button
+                        onClick={handleDiscardUtmMedium}
+                        disabled={isSavingUtm}
+                        className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Discard
+                      </button>
+                      <button
+                        onClick={handleSaveUtmMedium}
+                        disabled={isSavingUtm}
+                        className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:shadow-md disabled:opacity-50"
+                      >
+                        {isSavingUtm ? (
+                          <>
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <CheckIcon className="h-3.5 w-3.5" />
+                            Save
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    UTM Medium <span className="text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={utmMedium}
+                    onChange={(e) => {
+                      setUtmMedium(e.target.value);
+                      setIsUtmDirty(true);
+                    }}
+                    placeholder="e.g., email, newsletter, campaign"
+                    className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Leave empty to disable UTM tracking, or enter a value (e.g., "email") to enable automatic UTM parameter tracking on all links.
+                    When enabled, links will include utm_medium, utm_source (country code), and utm_campaign (country code).
+                  </p>
+                </div>
+
+                {isUtmDirty && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span className="font-semibold">Unsaved changes</span> - Click "Save" to apply UTM tracking settings
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Important Note */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
