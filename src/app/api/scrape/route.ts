@@ -552,19 +552,25 @@ async function processSingleUrl(
 
 Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
 
-Content: "${fullContent.length > 20000 ? fullContent.substring(0, 20000) + '...[truncated]' : fullContent}"
+Content: "${fullContent}"
 
 Return JSON:
 {
   "language": "ISO code (en/es/fr/de/hr/etc)",
   "title": "Product name",
   "description": "Brief description (max 200 chars)",
-  "regularPrice": "Original price",
-  "salePrice": "Sale price",
-  "discount": "Discount amount",
-  "bestImageUrl": "Best product image URL (prefer OG image)",
+  "regularPrice": "Original price. If on sale: the higher/original price.",
+  "salePrice": "If on sale: the lower/current price with currency. Empty if no discount.",
+  "discount": "Discount percentage (e.g. '33%'). Empty if no discount.",
+  "bestImageUrl": "Best product image URL",
   "allImages": ["product image URLs (max 10)"]
 }
+
+PRICE EXTRACTION:
+1. Look for the main sale product price display (usually largest, most prominent)
+2. Look for the original price display (usually smaller, less prominent)
+3. DO NOT extract prices from quantity/amount selectors (1x, 2x, 3x options)
+4. Ignore: bulk pricing tables, shipping costs, related products
 
 Use structured data above when available. Return full URLs only.`,
         },
@@ -588,6 +594,8 @@ Use structured data above when available. Return full URLs only.`,
           {
             role: "user",
             content: `Content: "${shorterContent}"
+
+PRICES: Must have currency (€,$,Kč,Ft). Find main/largest price. DO NOT use prices from quantity selectors (1x,2x,3x). Ignore bulk/shipping. Two prices: regularPrice=higher, salePrice=lower. One price: salePrice=empty.
 
 Return: {"language": "en", "title": "", "description": "", "regularPrice": "", "salePrice": "", "discount": "", "bestImageUrl": "", "allImages": []}`,
           },

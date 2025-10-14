@@ -7,6 +7,9 @@
       "Bash(tree:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\Users\\Korisnik\\Desktop\\WORK\\WORK PROJECTS\\templaito-backend"
+    ]
   }
 }
