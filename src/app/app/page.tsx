@@ -174,6 +174,7 @@ export default function TemplaitoApp() {
     sendDate: "",
     subject: "",
     preheader: "",
+    senderName: "",
   });
   const previewRef = useRef<HTMLIFrameElement>(null);
   // Fetch available prompts on component mount
@@ -568,7 +569,7 @@ export default function TemplaitoApp() {
     setCountryScrapeResults({});
     setPublishModalOpen(false);
     setPublishError("");
-    setPublishForm({ sendDate: "", subject: "", preheader: "" });
+    setPublishForm({ sendDate: "", subject: "", preheader: "", senderName: "" });
     setError("");
     setGlobalToast(null);
   };
@@ -590,7 +591,7 @@ export default function TemplaitoApp() {
   };
 
   const updatePublishForm = (
-    field: "sendDate" | "subject" | "preheader",
+    field: "sendDate" | "subject" | "preheader" | "senderName",
     value: string
   ) => {
     setPublishForm((prev) => ({
@@ -643,6 +644,7 @@ export default function TemplaitoApp() {
             baseCountry,
             subject: publishForm.subject,
             preheader: publishForm.preheader,
+            senderName: publishForm.senderName,
             sendDate: sendDateISO,
             emailTemplate: originalTemplate ?? template,
             countryResults: countryScrapeResults,
@@ -662,7 +664,7 @@ export default function TemplaitoApp() {
       const successMessage =
         "Publishing campaign to SqualoMail. Track progress in Campaigns.";
       setPublishModalOpen(false);
-      setPublishForm({ sendDate: "", subject: "", preheader: "" });
+      setPublishForm({ sendDate: "", subject: "", preheader: "", senderName: "" });
       setPublishError("");
       setGlobalToast(successMessage);
       if (typeof window !== "undefined") {
@@ -1587,6 +1589,47 @@ export default function TemplaitoApp() {
                     placeholder="Short teaser that appears in the inbox preview"
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sender name (optional)
+                  </label>
+                  {productInfo && baseCountry && countryScrapeResults[baseCountry] && (
+                    <div className="mb-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="text-xs text-indigo-700">
+                          <span className="font-medium">Default sender name: </span>
+                          <span className="font-semibold">
+                            {(() => {
+                              const baseResult = countryScrapeResults[baseCountry];
+                              if (baseResult.type === "SINGLE" && baseResult.productInfo?.title) {
+                                return baseResult.productInfo.title;
+                              } else if (baseResult.type === "MULTI" && baseResult.multiProductInfo?.products?.[0]?.title) {
+                                return baseResult.multiProductInfo.products[0].title;
+                              }
+                              return "Product name";
+                            })()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={publishForm.senderName}
+                    onChange={(e) =>
+                      updatePublishForm("senderName", e.target.value)
+                    }
+                    placeholder="Leave empty to use product name"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    If empty, we&apos;ll use the product name shown above as sender.
+                  </p>
                 </div>
 
                 <div>

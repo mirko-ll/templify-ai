@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import CustomSelect from "@/components/ui/custom-select";
-import { ArrowPathIcon, XMarkIcon, CheckIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  XMarkIcon,
+  CheckIcon,
+} from "@heroicons/react/24/outline";
 
 interface CountryConfig {
   id: string;
@@ -42,16 +46,24 @@ interface IntegrationTabsProps {
   ) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDisconnect: () => Promise<void>;
-  renderAlert: (alert: { type: "success" | "error"; message: string } | null) => React.ReactNode;
+  renderAlert: (
+    alert: { type: "success" | "error"; message: string } | null
+  ) => React.ReactNode;
   alert: { type: "success" | "error"; message: string } | null;
 }
 
-async function updateIntegrationSettings(clientId: string, utmMedium: string): Promise<void> {
-  const response = await fetch(`/api/clients/${clientId}/integration/squalomail`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ utmMedium: utmMedium.trim() || null }),
-  });
+async function updateIntegrationSettings(
+  clientId: string,
+  utmMedium: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/clients/${clientId}/integration/squalomail`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utmMedium: utmMedium.trim() || null }),
+    }
+  );
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
@@ -63,7 +75,6 @@ type CountryFormData = {
   mailingListId: string;
   mailingListName: string;
   senderEmail: string;
-  senderName: string;
 };
 
 export default function IntegrationTabs({
@@ -76,7 +87,9 @@ export default function IntegrationTabs({
   renderAlert,
   alert,
 }: IntegrationTabsProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "squalomail" | "klaviyo">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "squalomail" | "klaviyo"
+  >("overview");
   const [formData, setFormData] = useState<Record<string, CountryFormData>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -103,14 +116,15 @@ export default function IntegrationTabs({
   // Initialize form data from countries
   useEffect(() => {
     const initialData: Record<string, CountryFormData> = {};
-    countries.filter((c) => c.isActive).forEach((country) => {
-      initialData[country.countryCode] = {
-        mailingListId: country.mailingListId || "",
-        mailingListName: country.mailingListName || "",
-        senderEmail: country.senderEmail || "",
-        senderName: country.senderName || "",
-      };
-    });
+    countries
+      .filter((c) => c.isActive)
+      .forEach((country) => {
+        initialData[country.countryCode] = {
+          mailingListId: country.mailingListId || "",
+          mailingListName: country.mailingListName || "",
+          senderEmail: country.senderEmail || "",
+        };
+      });
     setFormData(initialData);
     setIsDirty(false);
   }, [countries]);
@@ -119,13 +133,18 @@ export default function IntegrationTabs({
   useEffect(() => {
     if (integration?.metadata && typeof integration.metadata === "object") {
       const metadata = integration.metadata as Record<string, unknown>;
-      const savedUtmMedium = typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
+      const savedUtmMedium =
+        typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
       setUtmMedium(savedUtmMedium);
       setIsUtmDirty(false);
     }
   }, [integration]);
 
-  const updateFormField = (countryCode: string, field: keyof CountryFormData, value: string) => {
+  const updateFormField = (
+    countryCode: string,
+    field: keyof CountryFormData,
+    value: string
+  ) => {
     setFormData((prev) => ({
       ...prev,
       [countryCode]: {
@@ -145,20 +164,15 @@ export default function IntegrationTabs({
         mailingListId: data.mailingListId || null,
         mailingListName: data.mailingListName || null,
         senderEmail: data.senderEmail || null,
-        senderName: data.senderName || null,
       }));
 
       // Use the existing onUpdateCountry but batch all updates
       for (const update of updates) {
-        await onUpdateCountry(
-          update.countryCode,
-          {
-            mailingListId: update.mailingListId,
-            mailingListName: update.mailingListName,
-            senderEmail: update.senderEmail,
-            senderName: update.senderName,
-          }
-        );
+        await onUpdateCountry(update.countryCode, {
+          mailingListId: update.mailingListId,
+          mailingListName: update.mailingListName,
+          senderEmail: update.senderEmail,
+        });
       }
 
       setIsDirty(false);
@@ -173,14 +187,15 @@ export default function IntegrationTabs({
   const handleDiscardChanges = () => {
     // Reset form data to original values
     const initialData: Record<string, CountryFormData> = {};
-    countries.filter((c) => c.isActive).forEach((country) => {
-      initialData[country.countryCode] = {
-        mailingListId: country.mailingListId || "",
-        mailingListName: country.mailingListName || "",
-        senderEmail: country.senderEmail || "",
-        senderName: country.senderName || "",
-      };
-    });
+    countries
+      .filter((c) => c.isActive)
+      .forEach((country) => {
+        initialData[country.countryCode] = {
+          mailingListId: country.mailingListId || "",
+          mailingListName: country.mailingListName || "",
+          senderEmail: country.senderEmail || "",
+        };
+      });
     setFormData(initialData);
     setIsDirty(false);
   };
@@ -204,7 +219,8 @@ export default function IntegrationTabs({
   const handleDiscardUtmMedium = () => {
     if (integration?.metadata && typeof integration.metadata === "object") {
       const metadata = integration.metadata as Record<string, unknown>;
-      const savedUtmMedium = typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
+      const savedUtmMedium =
+        typeof metadata.utmMedium === "string" ? metadata.utmMedium : "";
       setUtmMedium(savedUtmMedium);
       setIsUtmDirty(false);
     }
@@ -254,7 +270,8 @@ export default function IntegrationTabs({
                 Integration Overview
               </h3>
               <p className="mt-1 text-sm text-slate-600">
-                Manage your email marketing integrations and country configurations
+                Manage your email marketing integrations and country
+                configurations
               </p>
             </div>
 
@@ -267,7 +284,9 @@ export default function IntegrationTabs({
                 <p className="mt-2 text-3xl font-bold text-slate-900">
                   {connectedIntegrations}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">Email service{connectedIntegrations !== 1 ? "s" : ""}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Email service{connectedIntegrations !== 1 ? "s" : ""}
+                </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-emerald-50 p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -342,7 +361,8 @@ export default function IntegrationTabs({
                     UTM Tracking Configuration
                   </h4>
                   <p className="mt-1 text-xs text-slate-600">
-                    Configure UTM parameters for automatic link tracking in your campaigns
+                    Configure UTM parameters for automatic link tracking in your
+                    campaigns
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -380,7 +400,8 @@ export default function IntegrationTabs({
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    UTM Medium <span className="text-slate-500">(optional)</span>
+                    UTM Medium{" "}
+                    <span className="text-slate-500">(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -393,14 +414,17 @@ export default function IntegrationTabs({
                     className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                   <p className="mt-1.5 text-xs text-slate-500">
-                    Leave empty to disable UTM tracking, or enter a value (e.g., "email") to enable automatic UTM parameter tracking on all links.
-                    When enabled, links will include utm_medium, utm_source (country code), and utm_campaign (country code).
+                    Leave empty to disable UTM tracking, or enter a value (e.g.,
+                    email) to enable automatic UTM parameter tracking on all
+                    links. When enabled, links will include utm_medium,
+                    utm_source (country code), and utm_campaign (country code).
                   </p>
                 </div>
 
                 {isUtmDirty && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <span className="font-semibold">Unsaved changes</span> - Click "Save" to apply UTM tracking settings
+                    <span className="font-semibold">Unsaved changes</span> -
+                    Click Save to apply UTM tracking settings
                   </div>
                 )}
               </div>
@@ -412,8 +436,10 @@ export default function IntegrationTabs({
                 📧 Important: Sender Email Configuration
               </p>
               <p className="mt-1 text-xs text-amber-800">
-                Sender emails must match exactly with the verified sender emails in your SqualoMail account.
-                There is no API endpoint to fetch these, so please ensure they are correct before sending campaigns.
+                Sender emails must match exactly with the verified sender emails
+                in your SqualoMail account. There is no API endpoint to fetch
+                these, so please ensure they are correct before sending
+                campaigns.
               </p>
             </div>
 
@@ -481,9 +507,6 @@ export default function IntegrationTabs({
                           <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                             Sender Email
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Sender Name
-                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
@@ -494,16 +517,19 @@ export default function IntegrationTabs({
                               mailingListId: "",
                               mailingListName: "",
                               senderEmail: "",
-                              senderName: "",
                             };
 
                             return (
-                              <tr key={country.id} className="hover:bg-slate-50 transition">
+                              <tr
+                                key={country.id}
+                                className="hover:bg-slate-50 transition"
+                              >
                                 {/* Country */}
                                 <td className="px-4 py-2.5 text-sm">
                                   <div>
                                     <p className="font-semibold text-slate-900">
-                                      {country.country?.name || country.countryCode}
+                                      {country.country?.name ||
+                                        country.countryCode}
                                     </p>
                                     <p className="text-xs text-slate-500">
                                       {country.countryCode}
@@ -515,17 +541,25 @@ export default function IntegrationTabs({
                                 <td className="px-4 py-2.5">
                                   <div className="max-w-[280px]">
                                     {mailingLists.length === 0 ? (
-                                      <p className="text-xs text-slate-400">No lists</p>
+                                      <p className="text-xs text-slate-400">
+                                        No lists
+                                      </p>
                                     ) : (
                                       <CustomSelect
                                         options={mailingListOptions}
                                         value={data.mailingListId}
                                         onChange={(selected) => {
-                                          updateFormField(country.countryCode, "mailingListId", selected);
+                                          updateFormField(
+                                            country.countryCode,
+                                            "mailingListId",
+                                            selected
+                                          );
                                           updateFormField(
                                             country.countryCode,
                                             "mailingListName",
-                                            mailingLists.find((list) => list.id === selected)?.name || ""
+                                            mailingLists.find(
+                                              (list) => list.id === selected
+                                            )?.name || ""
                                           );
                                         }}
                                         placeholder="Select"
@@ -547,23 +581,14 @@ export default function IntegrationTabs({
                                     type="email"
                                     value={data.senderEmail}
                                     onChange={(e) =>
-                                      updateFormField(country.countryCode, "senderEmail", e.target.value)
+                                      updateFormField(
+                                        country.countryCode,
+                                        "senderEmail",
+                                        e.target.value
+                                      )
                                     }
                                     placeholder="sender@example.com"
-                                    className="w-full max-w-[240px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                  />
-                                </td>
-
-                                {/* Sender Name */}
-                                <td className="px-4 py-2.5">
-                                  <input
-                                    type="text"
-                                    value={data.senderName}
-                                    onChange={(e) =>
-                                      updateFormField(country.countryCode, "senderName", e.target.value)
-                                    }
-                                    placeholder="Company Name"
-                                    className="w-full max-w-[200px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    className="w-full max-w-[320px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-200"
                                   />
                                 </td>
                               </tr>
@@ -575,8 +600,16 @@ export default function IntegrationTabs({
 
                   {/* Footer with count */}
                   <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-center text-xs text-slate-600">
-                    {countries.filter((c) => c.isActive).length} {countries.filter((c) => c.isActive).length === 1 ? 'country' : 'countries'} configured
-                    {isDirty && <span className="ml-2 text-amber-600 font-semibold">• Unsaved changes</span>}
+                    {countries.filter((c) => c.isActive).length}{" "}
+                    {countries.filter((c) => c.isActive).length === 1
+                      ? "country"
+                      : "countries"}{" "}
+                    configured
+                    {isDirty && (
+                      <span className="ml-2 text-amber-600 font-semibold">
+                        • Unsaved changes
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

@@ -499,6 +499,27 @@ async function processSingleUrl(
     images: [] as string[]
   };
 
+  // NEW: Extract price information more thoroughly, including hidden elements
+  const priceElements: any = [];
+
+  // Look for common price patterns including hidden ones
+  $('[class*="price"], [data-price], .cost, .amount, del, ins').each((i, el) => {
+    const $el = $(el);
+    const priceText = $el.text().trim();
+    const priceHtml = $el.html();
+    const isHidden = $el.css('display') === 'none' || $el.attr('style')?.includes('display: none');
+
+    if (priceText && /\d/.test(priceText)) {
+      priceElements.push({
+        text: priceText,
+        html: priceHtml,
+        isHidden: isHidden,
+        element: el.tagName.toLowerCase(),
+        classes: $el.attr('class') || ''
+      });
+    }
+  });
+
   // Collect images more efficiently
   $('img[src*="product"], img[src*="item"], .product img, .gallery img, [class*="product"] img').each((i, el) => {
     const src = $(el).attr('src');
@@ -533,8 +554,12 @@ async function processSingleUrl(
     fullContent = fullContent.substring(0, maxLength) + "... [content truncated]";
   }
 
-  // Use structured data when available, shorter AI prompt
+  // NEW: Include price elements HTML in the prompt for better extraction
+  const priceElementsHtml = priceElements.map((el: any) =>
+    `<${el.element} class="${el.classes}" ${el.isHidden ? 'style="display:none"' : ''}>${el.html}</${el.element}>`
+  ).join('\n');
 
+  // Use structured data when available, shorter AI prompt
   let extractionResponse;
   try {
     extractionResponse = await openai.chat.completions.create({
@@ -552,12 +577,15 @@ async function processSingleUrl(
 
 Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
 
+Price Elements HTML:
+ ${priceElementsHtml}
+
 Content: "${fullContent}"
 
 Return JSON:
 {
   "language": "ISO code (en/es/fr/de/hr/etc)",
-  "title": "Product name",
+  "title": "CLEAN product name only (remove store name, website name, and any suffixes after dash/pipe/hyphen)",
   "description": "Brief description (max 200 chars)",
   "regularPrice": "Original price. If on sale: the higher/original price.",
   "salePrice": "If on sale: the lower/current price with currency. Empty if no discount.",
@@ -565,6 +593,12 @@ Return JSON:
   "bestImageUrl": "Best product image URL",
   "allImages": ["product image URLs (max 10)"]
 }
+
+TITLE CLEANING RULES:
+- Remove store/website names (e.g., "QuickPlan - Shopdbest CZ" → "QuickPlan")
+- Remove suffixes after dash, pipe, or hyphen if they look like store names
+- Keep only the actual product name
+- Examples: "iPhone 15 Pro - Apple Store" → "iPhone 15 Pro", "Magnetický plánovač - Shop.cz" → "Magnetický plánovač"
 
 PRICE EXTRACTION:
 1. Look for the main sale product price display (usually largest, most prominent)
@@ -594,6 +628,8 @@ Use structured data above when available. Return full URLs only.`,
           {
             role: "user",
             content: `Content: "${shorterContent}"
+
+TITLE: Extract CLEAN product name only. Remove store/site names after dash/pipe/hyphen. Example: "Product - StoreName" → "Product"
 
 PRICES: Must have currency (€,$,Kč,Ft). Find main/largest price. DO NOT use prices from quantity selectors (1x,2x,3x). Ignore bulk/shipping. Two prices: regularPrice=higher, salePrice=lower. One price: salePrice=empty.
 
