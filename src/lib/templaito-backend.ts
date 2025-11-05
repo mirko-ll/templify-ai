@@ -39,6 +39,8 @@ export async function callTemplaitoBackend<T = unknown>(
     headers: combinedHeaders,
   });
 
+  console.log('response --------------------------------------', url);
+
   if (!response.ok) {
     const message = await response.text();
     throw new Error(

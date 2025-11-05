@@ -1,8 +1,22 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
+import type { NextRequestWithAuth } from 'next-auth/middleware';
 
 export default withAuth(
-  function middleware() {
+  function middleware(request: NextRequestWithAuth) {
+    const token = request.nextauth.token;
+    const isAdmin = (token as any)?.isAdmin;
+    const { pathname } = request.nextUrl;
+
+    // Restrict admin-only routes
+    if (pathname.startsWith('/admin') && !isAdmin) {
+      return NextResponse.redirect(new URL('/app', request.url));
+    }
+
+    // Restrict clients and campaigns pages to admin only
+    if ((pathname.startsWith('/clients') || pathname.startsWith('/campaigns')) && !isAdmin) {
+      return NextResponse.redirect(new URL('/app', request.url));
+    }
 
     // Add cache-control headers to prevent caching issues
     const response = NextResponse.next();
@@ -35,5 +49,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ['/app/:path*', '/profile/:path*'],
+  matcher: ['/app/:path*', '/profile/:path*', '/clients/:path*', '/campaigns/:path*', '/admin/:path*'],
 };

@@ -134,6 +134,30 @@ export default function ClientsPage() {
     }
   };
 
+  const handleClearActiveClient = async () => {
+    setActivatingId("clearing");
+    setError(null);
+
+    try {
+      const response = await fetch("/api/clients/active", {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to clear active client");
+      }
+
+      setActiveClientId(null);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error ? err.message : "Failed to clear active client"
+      );
+    } finally {
+      setActivatingId(null);
+    }
+  };
+
   const handleInputChange = (field: keyof FormState, value: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -216,25 +240,42 @@ export default function ClientsPage() {
           </button>
         </div>
 
-        <form
-          onSubmit={handleSearch}
-          className="flex flex-col sm:flex-row gap-3 items-start sm:items-center"
-        >
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search clients by name"
-            className="w-full sm:max-w-md rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <button
-            type="submit"
-            className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+        <div className="flex flex-col gap-4">
+          <form
+            onSubmit={handleSearch}
+            className="flex flex-col sm:flex-row gap-3 items-start sm:items-center"
           >
-            <ArrowPathIcon className="w-4 h-4" />
-            Refresh
-          </button>
-        </form>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search clients by name"
+              className="w-full sm:max-w-md rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+            <button
+              type="submit"
+              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              Refresh
+            </button>
+          </form>
+
+          {activeClientId && (
+            <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+              <span className="text-sm font-medium text-indigo-900">
+                Active Client: {clients.find((c) => c.id === activeClientId)?.name || "Unknown"}
+              </span>
+              <button
+                onClick={handleClearActiveClient}
+                disabled={activatingId === "clearing"}
+                className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-white border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {activatingId === "clearing" ? "Clearing..." : "Clear Active Client"}
+              </button>
+            </div>
+          )}
+        </div>
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">

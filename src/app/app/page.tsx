@@ -93,13 +93,17 @@ function buildCountryUrlState(
   return result;
 }
 export default function TemplaitoApp() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
+  const isAdmin = Boolean(((session as any)?.user as any)?.isAdmin);
+
   useEffect(() => {
     router.prefetch("/campaigns");
   }, [router]);
 
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [singleUrlMode, setSingleUrlMode] = useState(false);
+  const [singleUrl, setSingleUrl] = useState("");
   const [countryConfigs, setCountryConfigs] = useState<
     ClientCountryConfigSummary[]
   >([]);
@@ -193,8 +197,22 @@ export default function TemplaitoApp() {
   }, [globalToast]);
 
   useEffect(() => {
-    loadClientContext();
-  }, []);
+    // Only load client context when session is loaded
+    if (status !== 'loading') {
+      loadClientContext();
+    }
+  }, [status, isAdmin]);
+
+  // Reload client context when page becomes visible (e.g., after navigating back from clients page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && status !== 'loading') {
+        loadClientContext();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isAdmin, status]);
 
   const fetchActivePrompts = async () => {
     try {
@@ -217,9 +235,9 @@ export default function TemplaitoApp() {
         setActiveClientId(null);
         setCountryConfigs([]);
         setCountryUrls({});
-        setError(
-          "Unable to determine the active client. Please refresh or set one in Clients."
-        );
+        // Enable single URL mode when no active client (for everyone)
+        setSingleUrlMode(true);
+        setError("");
         return;
       }
 
@@ -230,9 +248,9 @@ export default function TemplaitoApp() {
       if (!clientId) {
         setCountryConfigs([]);
         setCountryUrls({});
-        setError(
-          "Select an active client in the Clients area to start generating campaigns."
-        );
+        // Enable single URL mode when no active client (for everyone)
+        setSingleUrlMode(true);
+        setError("");
         return;
       }
 
@@ -268,15 +286,16 @@ export default function TemplaitoApp() {
       }
 
       setCountryUrls((previous) => buildCountryUrlState(eligible, previous));
+      setSingleUrlMode(false); // Disable single URL mode when client is active
       setError("");
     } catch (err) {
       console.error(err);
       setActiveClientId(null);
       setCountryConfigs([]);
       setCountryUrls({});
-      setError(
-        "Unexpected error loading client configuration. Please try again."
-      );
+      // Enable single URL mode on error (for everyone)
+      setSingleUrlMode(true);
+      setError("");
     } finally {
       setContextLoading(false);
     }
@@ -287,6 +306,18 @@ export default function TemplaitoApp() {
 
     if (contextLoading) {
       setError("Still loading client configuration. Please wait a moment.");
+      return;
+    }
+
+    // Single URL mode for non-admins without client
+    if (singleUrlMode) {
+      const trimmedUrl = singleUrl.trim();
+      if (!trimmedUrl) {
+        setError("Please enter a product URL.");
+        return;
+      }
+      setError("");
+      setStep("template-selection");
       return;
     }
 
@@ -374,6 +405,53 @@ export default function TemplaitoApp() {
     setBaseCountry(null);
     setCountryScrapeResults({});
     setStep("processing");
+
+    // Handle single URL mode for non-admins
+    if (singleUrlMode) {
+      const trimmedUrl = singleUrl.trim();
+      if (!trimmedUrl) {
+        setError("Please enter a product URL.");
+        setStep("input");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/scrape", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: trimmedUrl,
+            templateType: availableTemplates[templateIndex],
+            singleUrlMode: true, // Flag for backend to handle differently
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to process URL");
+        }
+
+        const data = await response.json();
+
+        // In single URL mode, we get simpler data structure
+        setOriginalTemplate(data.emailTemplate);
+        setTemplate(data.previewTemplate ?? data.emailTemplate);
+        setProductInfo(data.productInfo ?? null);
+        setStep("results");
+        setLoading(false);
+        return;
+      } catch (err) {
+        console.error(err);
+        setError(
+          "Failed to generate template. Please check the URL and try again."
+        );
+        setStep("input");
+        setLoading(false);
+        return;
+      }
+    }
 
     const urlsForRequest = isMultiProduct
       ? allValidUrls
@@ -557,6 +635,7 @@ export default function TemplaitoApp() {
 
   const resetForm = () => {
     setCountryUrls(buildCountryUrlState(countryConfigs));
+    setSingleUrl(""); // Reset single URL
     setStep("input");
     setTemplate(null);
     setOriginalTemplate(null);
@@ -903,12 +982,35 @@ export default function TemplaitoApp() {
                   <div className="space-y-6">
                     <div className="relative">
                       <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Step 1: Provide product URLs for each active country
+                        {singleUrlMode
+                          ? "Step 1: Provide a product URL"
+                          : "Step 1: Provide product URLs for each active country"}
                       </label>
 
                       {contextLoading ? (
                         <div className="flex items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8">
                           <InlineLoadingSpinner text="Loading client configuration..." />
+                        </div>
+                      ) : singleUrlMode ? (
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                            <input
+                              type="url"
+                              value={singleUrl}
+                              onChange={(e) => setSingleUrl(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleUrlSubmit(e);
+                                }
+                              }}
+                              placeholder="https://example.com/product"
+                              className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 transition-all text-gray-700"
+                            />
+                          </div>
+                          <p className="text-sm text-gray-500 text-center">
+                            Email template will be generated in the detected language
+                          </p>
                         </div>
                       ) : countryConfigs.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center space-y-3">
@@ -1131,7 +1233,7 @@ export default function TemplaitoApp() {
                         <span>
                           URL:{" "}
                           <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                            {allValidUrls[0]}
+                            {singleUrlMode ? singleUrl : allValidUrls[0]}
                           </span>
                         </span>
                       )}
@@ -1261,12 +1363,15 @@ export default function TemplaitoApp() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-3 justify-end">
-                      <button
-                        onClick={openPublishModal}
-                        className="bg-white text-indigo-600 hover:bg-indigo-50 cursor-pointer px-4 py-2 rounded-xl shadow transition-colors duration-200"
-                      >
-                        Publish to SqualoMail
-                      </button>
+                      {/* Hide publish button for non-admins or in single URL mode */}
+                      {!singleUrlMode && isAdmin && activeClientId && (
+                        <button
+                          onClick={openPublishModal}
+                          className="bg-white text-indigo-600 hover:bg-indigo-50 cursor-pointer px-4 py-2 rounded-xl shadow transition-colors duration-200"
+                        >
+                          Publish to SqualoMail
+                        </button>
+                      )}
                       <button
                         onClick={goBackToTemplateSelection}
                         className="bg-white/20 hover:bg-white/30 cursor-pointer px-4 py-2 rounded-xl transition-colors duration-200"

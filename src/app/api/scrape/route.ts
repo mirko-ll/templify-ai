@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     const body = await request.json();
 
-    const { url, templateType, isTest, countryUrls } = body ?? {};
+    const { url, templateType, isTest, countryUrls, singleUrlMode } = body ?? {};
 
     const hasCountryPayload =
       countryUrls &&
@@ -122,6 +122,66 @@ export async function POST(request: Request) {
         { error: "Template type is required" },
         { status: 400 }
       );
+    }
+
+    // Handle single URL mode for non-admins
+    if (singleUrlMode && url) {
+      let effectiveTemplate;
+      let dbPrompt = null;
+
+      if (isTest) {
+        effectiveTemplate = templateType;
+      } else {
+        dbPrompt = await prisma.prompt.findFirst({
+          where: {
+            name: templateType.name,
+            status: "ACTIVE",
+          },
+        });
+
+        effectiveTemplate = dbPrompt
+          ? {
+            name: dbPrompt.name,
+            description: dbPrompt.description || templateType.description,
+            system: dbPrompt.systemPrompt,
+            user: dbPrompt.userPrompt,
+            designEngine: dbPrompt.designEngine,
+          }
+          : templateType;
+      }
+
+      const startTime = Date.now();
+      const productInfo = await processSingleUrl(url, effectiveTemplate);
+
+      // Generate template in detected language (no translation)
+      const emailTemplate = await generateEmailTemplate(productInfo, url, effectiveTemplate);
+      const generationTime = Date.now() - startTime;
+
+      // Track usage
+      const userId = ((session as any)?.user as any)?.id as string | undefined;
+      if (userId && dbPrompt) {
+        try {
+          await prisma.templateGeneration.create({
+            data: {
+              promptId: dbPrompt.id,
+              userId: userId,
+              inputUrl: url,
+              productInfo: productInfo as any,
+              generatedHtml: emailTemplate?.html ?? "",
+              subject: emailTemplate?.subject ?? null,
+              generationTime,
+              wasSuccessful: true,
+            },
+          });
+        } catch (error) {
+          console.error("Failed to track template generation:", error);
+        }
+      }
+
+      return NextResponse.json({
+        emailTemplate,
+        productInfo,
+      });
     }
 
     let effectiveTemplate;

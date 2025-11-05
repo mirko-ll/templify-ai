@@ -91,20 +91,25 @@ export default function Header() {
                   Create Templates
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300" />
                 </Link>
-                <Link
-                  href="/clients"
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
-                >
-                  Clients
-                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300" />
-                </Link>
-                <Link
-                  href="/campaigns"
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
-                >
-                  Campaigns
-                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300" />
-                </Link>
+                {/* Only show for admins */}
+                {isAdmin && (
+                  <>
+                    <Link
+                      href="/clients"
+                      className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
+                    >
+                      Clients
+                      <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300" />
+                    </Link>
+                    <Link
+                      href="/campaigns"
+                      className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
+                    >
+                      Campaigns
+                      <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300" />
+                    </Link>
+                  </>
+                )}
                 <Link
                   href="/profile"
                   className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 relative group"
@@ -188,51 +193,56 @@ export default function Header() {
                       </div>
                     </div>
 
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
-                          href="/clients"
-                          className={`${
-                            active
-                              ? "bg-gradient-to-r from-indigo-50 to-purple-50"
-                              : ""
-                          } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
-                        >
-                          <div className="w-8 h-8 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-indigo-200 group-hover:to-purple-200 transition-all duration-200">
-                            <UserIcon className="h-4 w-4 text-indigo-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Clients</p>
-                            <p className="text-xs text-gray-500">
-                              Manage client workspaces
-                            </p>
-                          </div>
-                        </Link>
-                      )}
-                    </Menu.Item>
+                    {/* Only show for admins */}
+                    {isAdmin && (
+                      <>
+                        <Menu.Item>
+                          {({ active }) => (
+                            <Link
+                              href="/clients"
+                              className={`${
+                                active
+                                  ? "bg-gradient-to-r from-indigo-50 to-purple-50"
+                                  : ""
+                              } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
+                            >
+                              <div className="w-8 h-8 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-indigo-200 group-hover:to-purple-200 transition-all duration-200">
+                                <UserIcon className="h-4 w-4 text-indigo-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">Clients</p>
+                                <p className="text-xs text-gray-500">
+                                  Manage client workspaces
+                                </p>
+                              </div>
+                            </Link>
+                          )}
+                        </Menu.Item>
 
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
-                          href="/campaigns"
-                          className={`${
-                            active
-                              ? "bg-gradient-to-r from-purple-50 to-pink-50"
-                              : ""
-                          } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
-                        >
-                          <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-pink-200 transition-all duration-200">
-                            <SparklesIcon className="h-4 w-4 text-purple-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Campaigns</p>
-                            <p className="text-xs text-gray-500">
-                              Monitor SqualoMail deliveries
-                            </p>
-                          </div>
-                        </Link>
-                      )}
-                    </Menu.Item>
+                        <Menu.Item>
+                          {({ active }) => (
+                            <Link
+                              href="/campaigns"
+                              className={`${
+                                active
+                                  ? "bg-gradient-to-r from-purple-50 to-pink-50"
+                                  : ""
+                              } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
+                            >
+                              <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-pink-200 transition-all duration-200">
+                                <SparklesIcon className="h-4 w-4 text-purple-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">Campaigns</p>
+                                <p className="text-xs text-gray-500">
+                                  Monitor SqualoMail deliveries
+                                </p>
+                              </div>
+                            </Link>
+                          )}
+                        </Menu.Item>
+                      </>
+                    )}
 
                     <Menu.Item>
                       {({ active }) => (
