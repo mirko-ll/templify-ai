@@ -102,12 +102,28 @@ function getCountryFlag(countryCode: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
-// Extract country code from URL domain TLD (e.g., "vigoshop.hr" → "HR")
+// Extract country code from URL - checks both TLD and subdomain
+// Examples: "vigoshop.hr" → "HR", "si.coolmango.eu" → "SI"
 function extractCountryFromUrl(url: string): string | null {
   try {
-    const hostname = new URL(url).hostname;
-    const tld = hostname.split(".").pop()?.toUpperCase();
-    return tld && tld.length === 2 ? tld : null;
+    const hostname = new URL(url).hostname.toLowerCase();
+    const parts = hostname.split(".");
+
+    // 1. Check TLD first (e.g., "shop.hr" → "hr")
+    const tld = parts[parts.length - 1]?.toUpperCase();
+    if (tld && tld.length === 2 && !["EU", "IO", "CO", "ME", "TV"].includes(tld)) {
+      return tld;
+    }
+
+    // 2. Check subdomain (e.g., "si.shop.eu" → "si")
+    if (parts.length >= 2) {
+      const subdomain = parts[0]?.toUpperCase();
+      if (subdomain && subdomain.length === 2) {
+        return subdomain;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
