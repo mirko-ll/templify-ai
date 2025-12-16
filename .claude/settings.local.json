@@ -4,12 +4,17 @@
       "Bash(npx prisma migrate dev:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run migrate:prompts:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(dir \"C:\\Users\\User\\Desktop\\Dev Projects\\templify-ai\" /B)",
+      "Bash(cd:*)",
+      "Bash(dir \"C:\\Users\\User\\Desktop\\Dev Projects\\templify-ai\\src\" /B)",
+      "Bash(dir /s /b \"C:\\Users\\User\\Desktop\\Dev Projects\\templaito-backend\")"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "C:\\Users\\Korisnik\\Desktop\\WORK\\WORK PROJECTS\\templaito-backend"
+      "C:\\Users\\Korisnik\\Desktop\\WORK\\WORK PROJECTS\\templaito-backend",
+      "C:\\Users\\User\\Desktop\\Dev Projects\\templaito-backend"
     ]
   }
 }

@@ -92,6 +92,26 @@ function buildCountryUrlState(
   });
   return result;
 }
+
+// Convert ISO country code to emoji flag (e.g., "HR" → "🇭🇷")
+function getCountryFlag(countryCode: string): string {
+  const codePoints = countryCode
+    .toUpperCase()
+    .split("")
+    .map((char) => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
+// Extract country code from URL domain TLD (e.g., "vigoshop.hr" → "HR")
+function extractCountryFromUrl(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname;
+    const tld = hostname.split(".").pop()?.toUpperCase();
+    return tld && tld.length === 2 ? tld : null;
+  } catch {
+    return null;
+  }
+}
 export default function TemplaitoApp() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -108,6 +128,8 @@ export default function TemplaitoApp() {
     ClientCountryConfigSummary[]
   >([]);
   const [countryUrls, setCountryUrls] = useState<Record<string, string[]>>({});
+  const [selectedCountryTab, setSelectedCountryTab] = useState<string | null>(null);
+  const [pasteToast, setPasteToast] = useState<string | null>(null);
   const [contextLoading, setContextLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -196,6 +218,13 @@ export default function TemplaitoApp() {
     return () => window.clearTimeout(timer);
   }, [globalToast]);
 
+  // Paste toast auto-dismiss
+  useEffect(() => {
+    if (!pasteToast) return;
+    const timer = window.setTimeout(() => setPasteToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [pasteToast]);
+
   useEffect(() => {
     // Only load client context when session is loaded
     if (status !== 'loading') {
@@ -276,6 +305,10 @@ export default function TemplaitoApp() {
       );
 
       setCountryConfigs(eligible);
+      // Auto-select first tab if none selected
+      if (eligible.length > 0 && !selectedCountryTab) {
+        setSelectedCountryTab(eligible[0].countryCode);
+      }
 
       if (eligible.length === 0) {
         setCountryUrls({});
@@ -392,6 +425,56 @@ export default function TemplaitoApp() {
       };
     });
   };
+
+  // Smart paste: parse tab-separated URLs and auto-fill by country TLD
+  const handleSmartPaste = useCallback(
+    (pastedText: string) => {
+      if (!pastedText || countryConfigs.length === 0) return false;
+
+      // Split by tabs (Google Sheets) or newlines
+      const urls = pastedText
+        .split(/[\t\n]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.startsWith("http"));
+
+      if (urls.length === 0) return false;
+
+      const activeCountryCodes = new Set(
+        countryConfigs.map((c) => c.countryCode.toUpperCase())
+      );
+      const updates: Record<string, string[]> = {};
+      let matchedCount = 0;
+
+      urls.forEach((url) => {
+        const countryCode = extractCountryFromUrl(url);
+        if (countryCode && activeCountryCodes.has(countryCode)) {
+          if (!updates[countryCode]) {
+            updates[countryCode] = [];
+          }
+          updates[countryCode].push(url);
+          matchedCount++;
+        }
+      });
+
+      if (matchedCount === 0) return false;
+
+      setCountryUrls((prev) => {
+        const next = { ...prev };
+        Object.entries(updates).forEach(([code, newUrls]) => {
+          const existing = prev[code] ?? [""];
+          // Replace empty slots first, then append
+          const cleaned = existing.filter((u) => u.trim().length > 0);
+          next[code] = [...cleaned, ...newUrls];
+        });
+        return next;
+      });
+
+      setPasteToast(`Auto-filled ${matchedCount} URL${matchedCount > 1 ? "s" : ""} for ${Object.keys(updates).length} countr${Object.keys(updates).length > 1 ? "ies" : "y"}`);
+      return true;
+    },
+    [countryConfigs]
+  );
+
   const handleTemplateSelection = async (templateIndex: number) => {
     setSelectedTemplateType(templateIndex);
     setLoading(true);
@@ -933,6 +1016,18 @@ export default function TemplaitoApp() {
           </div>
         </div>
       )}
+      {pasteToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[2000] max-w-md rounded-2xl border border-indigo-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="text-sm text-indigo-700 font-medium">{pasteToast}</div>
+          </div>
+        </div>
+      )}
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
         {/* Animated Background Elements */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -1032,105 +1127,180 @@ export default function TemplaitoApp() {
                         </div>
                       ) : (
                         <>
-                          <div className="space-y-6">
+                          {/* Smart Paste Area */}
+                          <div className="mb-4">
+                            <div
+                              className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-4 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                              onPaste={(e) => {
+                                const text = e.clipboardData.getData("text");
+                                if (handleSmartPaste(text)) {
+                                  e.preventDefault();
+                                }
+                              }}
+                              onClick={() => {
+                                navigator.clipboard.readText().then((text) => {
+                                  handleSmartPaste(text);
+                                }).catch(() => {
+                                  // Clipboard access denied, ignore
+                                });
+                              }}
+                            >
+                              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <span>Click or paste URLs from Google Sheets — auto-detects country from domain</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Horizontal Country Tabs */}
+                          <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-thin scrollbar-thumb-gray-300">
                             {countryConfigs.map((config) => {
-                              const entries = countryUrls[
-                                config.countryCode
-                              ] ?? [""];
-                              const countryName =
-                                config.country?.name || config.countryCode;
+                              const hasUrls = (countryUrls[config.countryCode] ?? [""]).some(
+                                (u) => u.trim().length > 0
+                              );
+                              const isSelected = selectedCountryTab === config.countryCode;
 
                               return (
-                                <div
+                                <button
                                   key={config.id}
-                                  className="rounded-2xl border border-gray-200 bg-white/70 p-5 shadow-sm"
+                                  type="button"
+                                  onClick={() => setSelectedCountryTab(config.countryCode)}
+                                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "bg-indigo-600 text-white shadow-md"
+                                      : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300"
+                                  }`}
                                 >
-                                  <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                  <span className="text-base">{getCountryFlag(config.countryCode)}</span>
+                                  <span>{config.countryCode}</span>
+                                  {hasUrls && (
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${
+                                        isSelected ? "bg-white" : "bg-emerald-500"
+                                      }`}
+                                    />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Selected Country Input Area */}
+                          {selectedCountryTab && (() => {
+                            const config = countryConfigs.find(
+                              (c) => c.countryCode === selectedCountryTab
+                            );
+                            if (!config) return null;
+
+                            const entries = countryUrls[config.countryCode] ?? [""];
+                            const countryName = config.country?.name || config.countryCode;
+
+                            return (
+                              <div className="rounded-2xl border border-gray-200 bg-white/70 p-5 shadow-sm">
+                                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl">{getCountryFlag(config.countryCode)}</span>
                                     <div>
                                       <h3 className="text-lg font-semibold text-gray-900">
                                         {countryName}
                                       </h3>
                                       <p className="text-sm text-gray-500">
-                                        Mailing list:{" "}
-                                        {config.mailingListName ||
-                                          config.mailingListId}
+                                        Mailing list: {config.mailingListName || config.mailingListId}
                                       </p>
                                     </div>
-                                    <div className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
-                                      {config.countryCode}
-                                    </div>
                                   </div>
-
-                                  <div className="space-y-2.5">
-                                    {entries.map((value, index) => (
-                                      <div
-                                        key={`${config.countryCode}-${index}`}
-                                        className="relative group"
-                                      >
-                                        <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                        <input
-                                          type="url"
-                                          value={value}
-                                          onChange={(event) =>
-                                            updateCountryUrl(
-                                              config.countryCode,
-                                              index,
-                                              event.target.value
-                                            )
-                                          }
-                                          onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                              handleUrlSubmit(event);
-                                            }
-                                          }}
-                                          placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}-${
-                                            index + 1
-                                          }`}
-                                          className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-700 duration-200 text-sm"
-                                        />
-                                        {entries.length > 1 && (
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              removeCountryUrl(
-                                                config.countryCode,
-                                                index
-                                              )
-                                            }
-                                            className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors duration-200 text-xl leading-none"
-                                            title="Remove URL"
-                                          >
-                                            {"×"}
-                                          </button>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      addCountryUrl(config.countryCode)
-                                    }
-                                    className="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
-                                  >
-                                    <span className="text-base leading-none">
-                                      +
-                                    </span>
-                                    Add another URL for {countryName}
-                                  </button>
                                 </div>
-                              );
-                            })}
-                          </div>
-                          <div className="flex items-center justify-between pt-2 text-sm text-gray-500">
-                            <span>{`Active countries: ${countryConfigs.length}`}</span>
+
+                                <div className="space-y-2.5">
+                                  {entries.map((value, index) => (
+                                    <div
+                                      key={`${config.countryCode}-${index}`}
+                                      className="relative group"
+                                    >
+                                      <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                      <input
+                                        type="url"
+                                        value={value}
+                                        onChange={(event) =>
+                                          updateCountryUrl(
+                                            config.countryCode,
+                                            index,
+                                            event.target.value
+                                          )
+                                        }
+                                        onPaste={(e) => {
+                                          const text = e.clipboardData.getData("text");
+                                          if (text.includes("\t") || text.includes("\n")) {
+                                            if (handleSmartPaste(text)) {
+                                              e.preventDefault();
+                                            }
+                                          }
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            handleUrlSubmit(event);
+                                          }
+                                          // Arrow key navigation between tabs
+                                          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                                            const currentIndex = countryConfigs.findIndex(
+                                              (c) => c.countryCode === selectedCountryTab
+                                            );
+                                            if (currentIndex !== -1) {
+                                              const newIndex =
+                                                event.key === "ArrowLeft"
+                                                  ? (currentIndex - 1 + countryConfigs.length) % countryConfigs.length
+                                                  : (currentIndex + 1) % countryConfigs.length;
+                                              setSelectedCountryTab(countryConfigs[newIndex].countryCode);
+                                            }
+                                          }
+                                        }}
+                                        placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}`}
+                                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-700 duration-200 text-sm"
+                                      />
+                                      {entries.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeCountryUrl(config.countryCode, index)
+                                          }
+                                          className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors duration-200 text-xl leading-none"
+                                          title="Remove URL"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => addCountryUrl(config.countryCode)}
+                                  className="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
+                                >
+                                  <span className="text-base leading-none">+</span>
+                                  Add another URL
+                                </button>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Status Bar */}
+                          <div className="flex items-center justify-between pt-3 text-sm text-gray-500">
+                            <span>
+                              {(() => {
+                                const filledCount = countryConfigs.filter((c) =>
+                                  (countryUrls[c.countryCode] ?? [""]).some((u) => u.trim().length > 0)
+                                ).length;
+                                return `${filledCount}/${countryConfigs.length} countries filled`;
+                              })()}
+                            </span>
                             <span>
                               {allValidUrls.length === 0
                                 ? "No product URLs added yet"
-                                : `${allValidUrls.length} product URL${
-                                    allValidUrls.length > 1 ? "s" : ""
-                                  } ready`}
+                                : `${allValidUrls.length} product URL${allValidUrls.length > 1 ? "s" : ""} ready`}
                             </span>
                           </div>
                         </>
