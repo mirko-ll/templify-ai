@@ -481,23 +481,7 @@ export default function CreatePromptPage() {
                     | "SINGLE_PRODUCT"
                     | "MULTI_PRODUCT",
                 }}
-                onTestComplete={(result) => {
-                  if (result.success) {
-                    console.log("Test completed successfully!", result);
-                  } else {
-                    // Don't log validation errors as console errors, only API/system errors
-                    if (
-                      result.error?.includes("URL") ||
-                      result.error?.includes("valid")
-                    ) {
-                      // This is a validation error, just log as info
-                      console.log("Validation error:", result.error);
-                    } else {
-                      // This is a real API/system error
-                      console.error("Test failed:", result.error);
-                    }
-                  }
-                }}
+                onTestComplete={() => {}}
               />
             )}
           </div>

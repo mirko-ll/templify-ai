@@ -20,6 +20,8 @@ import {
   PaintBrushIcon,
   BeakerIcon,
   ArrowTopRightOnSquareIcon,
+  PlusIcon,
+  PhotoIcon,
 } from "@heroicons/react/24/outline";
 import ExternalImage from "@/components/ui/external-image";
 import { templateUIConfig } from "@/lib/template-config";
@@ -111,7 +113,11 @@ function extractCountryFromUrl(url: string): string | null {
 
     // 1. Check TLD first (e.g., "shop.hr" → "hr")
     const tld = parts[parts.length - 1]?.toUpperCase();
-    if (tld && tld.length === 2 && !["EU", "IO", "CO", "ME", "TV"].includes(tld)) {
+    if (
+      tld &&
+      tld.length === 2 &&
+      !["EU", "IO", "CO", "ME", "TV"].includes(tld)
+    ) {
       return tld;
     }
 
@@ -144,7 +150,9 @@ export default function TemplaitoApp() {
     ClientCountryConfigSummary[]
   >([]);
   const [countryUrls, setCountryUrls] = useState<Record<string, string[]>>({});
-  const [selectedCountryTab, setSelectedCountryTab] = useState<string | null>(null);
+  const [selectedCountryTab, setSelectedCountryTab] = useState<string | null>(
+    null
+  );
   const [pasteToast, setPasteToast] = useState<string | null>(null);
   const [contextLoading, setContextLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -191,7 +199,9 @@ export default function TemplaitoApp() {
   const [originalTemplate, setOriginalTemplate] = useState<Template | null>(
     null
   );
-  const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
+  const [productInfo, setProductInfo] = useState<
+    ProductInfo | MultiProductInfo | null
+  >(null);
   const [baseCountry, setBaseCountry] = useState<string | null>(null);
   const [countryScrapeResults, setCountryScrapeResults] = useState<
     Record<string, CountryScrapeResult>
@@ -218,6 +228,7 @@ export default function TemplaitoApp() {
     preheader: "",
     senderName: "",
   });
+  const [customImageUrl, setCustomImageUrl] = useState("");
   const previewRef = useRef<HTMLIFrameElement>(null);
   // Fetch available prompts on component mount
   useEffect(() => {
@@ -243,7 +254,7 @@ export default function TemplaitoApp() {
 
   useEffect(() => {
     // Only load client context when session is loaded
-    if (status !== 'loading') {
+    if (status !== "loading") {
       loadClientContext();
     }
   }, [status, isAdmin]);
@@ -251,12 +262,13 @@ export default function TemplaitoApp() {
   // Reload client context when page becomes visible (e.g., after navigating back from clients page)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && status !== 'loading') {
+      if (!document.hidden && status !== "loading") {
         loadClientContext();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [isAdmin, status]);
 
   const fetchActivePrompts = async () => {
@@ -485,7 +497,11 @@ export default function TemplaitoApp() {
         return next;
       });
 
-      setPasteToast(`Auto-filled ${matchedCount} URL${matchedCount > 1 ? "s" : ""} for ${Object.keys(updates).length} countr${Object.keys(updates).length > 1 ? "ies" : "y"}`);
+      setPasteToast(
+        `Auto-filled ${matchedCount} URL${matchedCount > 1 ? "s" : ""} for ${
+          Object.keys(updates).length
+        } countr${Object.keys(updates).length > 1 ? "ies" : "y"}`
+      );
       return true;
     },
     [countryConfigs]
@@ -667,9 +683,10 @@ export default function TemplaitoApp() {
         });
       } else {
         // For single product, replace the best image URL with the selected image URL
+        const singleInfo = productInfo as ProductInfo;
         const selectedImageUrl =
-          productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-        const originalImageUrl = productInfo.bestImageUrl;
+          singleInfo.images[selectedImageIndex] || singleInfo.bestImageUrl;
+        const originalImageUrl = singleInfo.bestImageUrl;
         updatedHtml = template.html
           .split(originalImageUrl)
           .join(selectedImageUrl);
@@ -703,9 +720,10 @@ export default function TemplaitoApp() {
         });
       } else {
         // For single product, replace the best image URL with the selected image URL
+        const singleInfo = productInfo as ProductInfo;
         const selectedImageUrl =
-          productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-        const originalImageUrl = productInfo.bestImageUrl;
+          singleInfo.images[selectedImageIndex] || singleInfo.bestImageUrl;
+        const originalImageUrl = singleInfo.bestImageUrl;
         updatedHtml = template.html
           .split(originalImageUrl)
           .join(selectedImageUrl);
@@ -743,11 +761,17 @@ export default function TemplaitoApp() {
     setSelectedImageIndex(0);
     setSelectedProductIndex(0);
     setMultiProductImageSelections({});
+    setCustomImageUrl(""); // Reset custom image URL
     setBaseCountry(null);
     setCountryScrapeResults({});
     setPublishModalOpen(false);
     setPublishError("");
-    setPublishForm({ sendDate: "", subject: "", preheader: "", senderName: "" });
+    setPublishForm({
+      sendDate: "",
+      subject: "",
+      preheader: "",
+      senderName: "",
+    });
     setError("");
     setGlobalToast(null);
   };
@@ -842,7 +866,12 @@ export default function TemplaitoApp() {
       const successMessage =
         "Publishing campaign to SqualoMail. Track progress in Campaigns.";
       setPublishModalOpen(false);
-      setPublishForm({ sendDate: "", subject: "", preheader: "", senderName: "" });
+      setPublishForm({
+        sendDate: "",
+        subject: "",
+        preheader: "",
+        senderName: "",
+      });
       setPublishError("");
       setGlobalToast(successMessage);
       if (typeof window !== "undefined") {
@@ -874,6 +903,7 @@ export default function TemplaitoApp() {
     setSelectedImageIndex(0);
     setSelectedProductIndex(0);
     setMultiProductImageSelections({});
+    setCustomImageUrl(""); // Reset custom image URL
   };
 
   const handleMultiProductImageSelection = (
@@ -888,6 +918,81 @@ export default function TemplaitoApp() {
 
   // Determine which templates to show
   const isMultiProduct = hasMultiProductCountry;
+
+  const handleAddCustomImage = () => {
+    if (!customImageUrl.trim() || !productInfo) return;
+    const url = customImageUrl.trim();
+
+    // 1. Update local productInfo for immediate preview update
+    setProductInfo((prev) => {
+      if (!prev) return prev;
+      if (isMultiProduct && "products" in prev) {
+        const multi = prev as MultiProductInfo;
+        const newProducts = [...multi.products];
+        const product = { ...newProducts[selectedProductIndex] };
+        // Append to images
+        const newImages = [...(product.images || []), url];
+        product.images = newImages;
+        newProducts[selectedProductIndex] = product;
+
+        // Auto-select the newly added image
+        setMultiProductImageSelections((prevSelections) => ({
+          ...prevSelections,
+          [selectedProductIndex]: newImages.length - 1,
+        }));
+
+        return { ...multi, products: newProducts };
+      } else {
+        const single = prev as ProductInfo;
+        const newImages = [...(single.images || []), url];
+
+        // Auto-select
+        setSelectedImageIndex(newImages.length - 1);
+
+        return { ...single, images: newImages };
+      }
+    });
+
+    // 2. Update countryScrapeResults for backend submission
+    setCountryScrapeResults((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((countryCode) => {
+        const result = next[countryCode];
+        if (result.type === "SINGLE" && !isMultiProduct) {
+          const pInfo = result.productInfo;
+          if (pInfo) {
+            next[countryCode] = {
+              ...result,
+              productInfo: {
+                ...pInfo,
+                images: [...(pInfo.images || []), url],
+              },
+            };
+          }
+        } else if (result.type === "MULTI" && isMultiProduct) {
+          const mInfo = result.multiProductInfo;
+          if (mInfo && mInfo.products[selectedProductIndex]) {
+            const newProducts = [...mInfo.products];
+            const product = { ...newProducts[selectedProductIndex] };
+            product.images = [...(product.images || []), url];
+            newProducts[selectedProductIndex] = product;
+
+            next[countryCode] = {
+              ...result,
+              multiProductInfo: {
+                ...mInfo,
+                products: newProducts,
+              },
+            };
+          }
+        }
+      });
+      return next;
+    });
+
+    setCustomImageUrl("");
+    setGlobalToast("Image added via URL");
+  };
 
   const buildImageOverrides = useCallback(():
     | PublishImageOverrides
@@ -968,9 +1073,10 @@ export default function TemplaitoApp() {
           });
         } else {
           // For single product, replace the best image URL with the selected image URL
+          const singleInfo = productInfo as ProductInfo;
           const selectedImageUrl =
-            productInfo.images[selectedImageIndex] || productInfo.bestImageUrl;
-          const originalImageUrl = productInfo.bestImageUrl;
+            singleInfo.images[selectedImageIndex] || singleInfo.bestImageUrl;
+          const originalImageUrl = singleInfo.bestImageUrl;
           updatedHtml = template.html
             .split(originalImageUrl)
             .join(selectedImageUrl);
@@ -1036,11 +1142,23 @@ export default function TemplaitoApp() {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[2000] max-w-md rounded-2xl border border-indigo-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-              <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-4 h-4 text-indigo-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
-            <div className="text-sm text-indigo-700 font-medium">{pasteToast}</div>
+            <div className="text-sm text-indigo-700 font-medium">
+              {pasteToast}
+            </div>
           </div>
         </div>
       )}
@@ -1120,7 +1238,8 @@ export default function TemplaitoApp() {
                             />
                           </div>
                           <p className="text-sm text-gray-500 text-center">
-                            Email template will be generated in the detected language
+                            Email template will be generated in the detected
+                            language
                           </p>
                         </div>
                       ) : countryConfigs.length === 0 ? (
@@ -1154,18 +1273,34 @@ export default function TemplaitoApp() {
                                 }
                               }}
                               onClick={() => {
-                                navigator.clipboard.readText().then((text) => {
-                                  handleSmartPaste(text);
-                                }).catch(() => {
-                                  // Clipboard access denied, ignore
-                                });
+                                navigator.clipboard
+                                  .readText()
+                                  .then((text) => {
+                                    handleSmartPaste(text);
+                                  })
+                                  .catch(() => {
+                                    // Clipboard access denied, ignore
+                                  });
                               }}
                             >
                               <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                  />
                                 </svg>
-                                <span>Click or paste URLs from Google Sheets — auto-detects country from domain</span>
+                                <span>
+                                  Click or paste URLs from Google Sheets —
+                                  auto-detects country from domain
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -1173,28 +1308,35 @@ export default function TemplaitoApp() {
                           {/* Horizontal Country Tabs */}
                           <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-thin scrollbar-thumb-gray-300">
                             {countryConfigs.map((config) => {
-                              const hasUrls = (countryUrls[config.countryCode] ?? [""]).some(
-                                (u) => u.trim().length > 0
-                              );
-                              const isSelected = selectedCountryTab === config.countryCode;
+                              const hasUrls = (
+                                countryUrls[config.countryCode] ?? [""]
+                              ).some((u) => u.trim().length > 0);
+                              const isSelected =
+                                selectedCountryTab === config.countryCode;
 
                               return (
                                 <button
                                   key={config.id}
                                   type="button"
-                                  onClick={() => setSelectedCountryTab(config.countryCode)}
+                                  onClick={() =>
+                                    setSelectedCountryTab(config.countryCode)
+                                  }
                                   className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                                     isSelected
                                       ? "bg-indigo-600 text-white shadow-md"
                                       : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300"
                                   }`}
                                 >
-                                  <span className="text-base">{getCountryFlag(config.countryCode)}</span>
+                                  <span className="text-base">
+                                    {getCountryFlag(config.countryCode)}
+                                  </span>
                                   <span>{config.countryCode}</span>
                                   {hasUrls && (
                                     <span
                                       className={`w-2 h-2 rounded-full ${
-                                        isSelected ? "bg-white" : "bg-emerald-500"
+                                        isSelected
+                                          ? "bg-white"
+                                          : "bg-emerald-500"
                                       }`}
                                     />
                                   )}
@@ -1204,111 +1346,145 @@ export default function TemplaitoApp() {
                           </div>
 
                           {/* Selected Country Input Area */}
-                          {selectedCountryTab && (() => {
-                            const config = countryConfigs.find(
-                              (c) => c.countryCode === selectedCountryTab
-                            );
-                            if (!config) return null;
+                          {selectedCountryTab &&
+                            (() => {
+                              const config = countryConfigs.find(
+                                (c) => c.countryCode === selectedCountryTab
+                              );
+                              if (!config) return null;
 
-                            const entries = countryUrls[config.countryCode] ?? [""];
-                            const countryName = config.country?.name || config.countryCode;
+                              const entries = countryUrls[
+                                config.countryCode
+                              ] ?? [""];
+                              const countryName =
+                                config.country?.name || config.countryCode;
 
-                            return (
-                              <div className="rounded-2xl border border-gray-200 bg-white/70 p-5 shadow-sm">
-                                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-2xl">{getCountryFlag(config.countryCode)}</span>
-                                    <div>
-                                      <h3 className="text-lg font-semibold text-gray-900">
-                                        {countryName}
-                                      </h3>
-                                      <p className="text-sm text-gray-500">
-                                        Mailing list: {config.mailingListName || config.mailingListId}
-                                      </p>
+                              return (
+                                <div className="rounded-2xl border border-gray-200 bg-white/70 p-5 shadow-sm">
+                                  <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-2xl">
+                                        {getCountryFlag(config.countryCode)}
+                                      </span>
+                                      <div>
+                                        <h3 className="text-lg font-semibold text-gray-900">
+                                          {countryName}
+                                        </h3>
+                                        <p className="text-sm text-gray-500">
+                                          Mailing list:{" "}
+                                          {config.mailingListName ||
+                                            config.mailingListId}
+                                        </p>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                <div className="space-y-2.5">
-                                  {entries.map((value, index) => (
-                                    <div
-                                      key={`${config.countryCode}-${index}`}
-                                      className="relative group"
-                                    >
-                                      <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                      <input
-                                        type="url"
-                                        value={value}
-                                        onChange={(event) =>
-                                          updateCountryUrl(
-                                            config.countryCode,
-                                            index,
-                                            event.target.value
-                                          )
-                                        }
-                                        onPaste={(e) => {
-                                          const text = e.clipboardData.getData("text");
-                                          if (text.includes("\t") || text.includes("\n")) {
-                                            if (handleSmartPaste(text)) {
-                                              e.preventDefault();
+                                  <div className="space-y-2.5">
+                                    {entries.map((value, index) => (
+                                      <div
+                                        key={`${config.countryCode}-${index}`}
+                                        className="relative group"
+                                      >
+                                        <LinkIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                        <input
+                                          type="url"
+                                          value={value}
+                                          onChange={(event) =>
+                                            updateCountryUrl(
+                                              config.countryCode,
+                                              index,
+                                              event.target.value
+                                            )
+                                          }
+                                          onPaste={(e) => {
+                                            const text =
+                                              e.clipboardData.getData("text");
+                                            if (
+                                              text.includes("\t") ||
+                                              text.includes("\n")
+                                            ) {
+                                              if (handleSmartPaste(text)) {
+                                                e.preventDefault();
+                                              }
                                             }
-                                          }
-                                        }}
-                                        onKeyDown={(event) => {
-                                          if (event.key === "Enter") {
-                                            handleUrlSubmit(event);
-                                          }
-                                          // Arrow key navigation between tabs
-                                          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-                                            const currentIndex = countryConfigs.findIndex(
-                                              (c) => c.countryCode === selectedCountryTab
-                                            );
-                                            if (currentIndex !== -1) {
-                                              const newIndex =
-                                                event.key === "ArrowLeft"
-                                                  ? (currentIndex - 1 + countryConfigs.length) % countryConfigs.length
-                                                  : (currentIndex + 1) % countryConfigs.length;
-                                              setSelectedCountryTab(countryConfigs[newIndex].countryCode);
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                              handleUrlSubmit(event);
                                             }
-                                          }
-                                        }}
-                                        placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}`}
-                                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-700 duration-200 text-sm"
-                                      />
-                                      {entries.length > 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            removeCountryUrl(config.countryCode, index)
-                                          }
-                                          className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors duration-200 text-xl leading-none"
-                                          title="Remove URL"
-                                        >
-                                          ×
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
+                                            // Arrow key navigation between tabs
+                                            if (
+                                              event.key === "ArrowLeft" ||
+                                              event.key === "ArrowRight"
+                                            ) {
+                                              const currentIndex =
+                                                countryConfigs.findIndex(
+                                                  (c) =>
+                                                    c.countryCode ===
+                                                    selectedCountryTab
+                                                );
+                                              if (currentIndex !== -1) {
+                                                const newIndex =
+                                                  event.key === "ArrowLeft"
+                                                    ? (currentIndex -
+                                                        1 +
+                                                        countryConfigs.length) %
+                                                      countryConfigs.length
+                                                    : (currentIndex + 1) %
+                                                      countryConfigs.length;
+                                                setSelectedCountryTab(
+                                                  countryConfigs[newIndex]
+                                                    .countryCode
+                                                );
+                                              }
+                                            }
+                                          }}
+                                          placeholder={`https://example.com/product/${config.countryCode.toLowerCase()}`}
+                                          className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 placeholder:text-sm transition-all text-gray-700 duration-200 text-sm"
+                                        />
+                                        {entries.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              removeCountryUrl(
+                                                config.countryCode,
+                                                index
+                                              )
+                                            }
+                                            className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors duration-200 text-xl leading-none"
+                                            title="Remove URL"
+                                          >
+                                            ×
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => addCountryUrl(config.countryCode)}
-                                  className="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
-                                >
-                                  <span className="text-base leading-none">+</span>
-                                  Add another URL
-                                </button>
-                              </div>
-                            );
-                          })()}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      addCountryUrl(config.countryCode)
+                                    }
+                                    className="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-semibold"
+                                  >
+                                    <span className="text-base leading-none">
+                                      +
+                                    </span>
+                                    Add another URL
+                                  </button>
+                                </div>
+                              );
+                            })()}
 
                           {/* Status Bar */}
                           <div className="flex items-center justify-between pt-3 text-sm text-gray-500">
                             <span>
                               {(() => {
                                 const filledCount = countryConfigs.filter((c) =>
-                                  (countryUrls[c.countryCode] ?? [""]).some((u) => u.trim().length > 0)
+                                  (countryUrls[c.countryCode] ?? [""]).some(
+                                    (u) => u.trim().length > 0
+                                  )
                                 ).length;
                                 return `${filledCount}/${countryConfigs.length} countries filled`;
                               })()}
@@ -1316,7 +1492,9 @@ export default function TemplaitoApp() {
                             <span>
                               {allValidUrls.length === 0
                                 ? "No product URLs added yet"
-                                : `${allValidUrls.length} product URL${allValidUrls.length > 1 ? "s" : ""} ready`}
+                                : `${allValidUrls.length} product URL${
+                                    allValidUrls.length > 1 ? "s" : ""
+                                  } ready`}
                             </span>
                           </div>
                         </>
@@ -1542,7 +1720,9 @@ export default function TemplaitoApp() {
                         Template Is Ready! 🎉
                       </h2>
                       <p className="opacity-90">
-                        {productInfo?.title && `For: ${productInfo.title}`}
+                        {productInfo &&
+                          "title" in productInfo &&
+                          `For: ${(productInfo as ProductInfo).title}`}
                         {productInfo?.language &&
                           ` (${productInfo.language.toUpperCase()})`}
                         {isMultiProduct && ` - ${allValidUrls.length} Products`}
@@ -1653,8 +1833,8 @@ export default function TemplaitoApp() {
                   {/* Image Selector */}
                   {productInfo &&
                     !isMultiProduct &&
-                    productInfo.images &&
-                    productInfo.images.length > 1 && (
+                    !("products" in productInfo) &&
+                    (productInfo as ProductInfo).images && (
                       <div className="p-4 bg-gray-50 border-b border-gray-200">
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="font-semibold text-gray-800">
@@ -1662,32 +1842,101 @@ export default function TemplaitoApp() {
                           </h4>
                           <span className="text-sm text-gray-500">
                             {selectedImageIndex + 1} of{" "}
-                            {productInfo.images.length}
+                            {(productInfo as ProductInfo).images.length}
                           </span>
                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-2">
-                          {productInfo.images.map((image, index) => (
-                            <button
-                              key={index}
-                              onClick={() => setSelectedImageIndex(index)}
-                              className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
-                                selectedImageIndex === index
-                                  ? "border-blue-500 ring-2 ring-blue-200"
-                                  : "border-gray-200 hover:border-gray-300"
-                              }`}
-                            >
-                              <ExternalImage
-                                src={image}
-                                alt={`Product image ${index + 1}`}
-                                className="w-full h-full object-cover rounded-md"
-                                width={64}
-                                height={64}
-                                onError={(e) => {
-                                  e.currentTarget.style.display = "none";
-                                }}
-                              />
-                            </button>
-                          ))}
+                        <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+                          {(productInfo as ProductInfo).images.map(
+                            (image: string, index: number) => (
+                              <button
+                                key={index}
+                                onClick={() => setSelectedImageIndex(index)}
+                                className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                                  selectedImageIndex === index
+                                    ? "border-blue-500 ring-2 ring-blue-200"
+                                    : "border-gray-200 hover:border-gray-300"
+                                }`}
+                              >
+                                <ExternalImage
+                                  src={image}
+                                  alt={`Product image ${index + 1}`}
+                                  className="w-full h-full object-cover rounded-md"
+                                  width={64}
+                                  height={64}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                  }}
+                                />
+                              </button>
+                            )
+                          )}
+                        </div>
+
+                        {/* Custom Image Input */}
+                        <div className="mt-4 border-t border-gray-200 pt-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="p-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg">
+                              <PhotoIcon className="w-4 h-4 text-white" />
+                            </div>
+                            <h5 className="text-sm font-semibold text-gray-700">
+                              Add Custom Image
+                            </h5>
+                          </div>
+                          <div className="flex gap-3">
+                            {/* Image Preview */}
+                            <div className="flex-shrink-0 w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                              {customImageUrl.trim() ? (
+                                <ExternalImage
+                                  src={customImageUrl.trim()}
+                                  alt="Preview"
+                                  width={64}
+                                  height={64}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    e.currentTarget.parentElement!.innerHTML = `<div class="text-center px-1"><svg class="w-5 h-5 text-red-400 mx-auto mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-red-500">Invalid</span></div>`;
+                                  }}
+                                />
+                              ) : (
+                                <div className="text-center">
+                                  <PhotoIcon className="w-6 h-6 text-gray-300 mx-auto" />
+                                  <span className="text-[10px] text-gray-400 mt-0.5 block">Preview</span>
+                                </div>
+                              )}
+                            </div>
+                            {/* Input and Button */}
+                            <div className="flex-1 flex flex-col gap-2">
+                              <div className="relative">
+                                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                  type="url"
+                                  placeholder="Paste image URL here..."
+                                  className="w-full pl-10 pr-3 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 placeholder:text-gray-400 transition-all duration-200"
+                                  value={customImageUrl}
+                                  onChange={(e) =>
+                                    setCustomImageUrl(e.target.value)
+                                  }
+                                  onKeyDown={(e) =>
+                                    e.key === "Enter" &&
+                                    (e.preventDefault(), handleAddCustomImage())
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-400">
+                                  Supports JPG, PNG, WebP
+                                </span>
+                                <button
+                                  onClick={handleAddCustomImage}
+                                  className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-indigo-200/50 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer transition-all duration-200 flex items-center gap-1.5"
+                                  disabled={!customImageUrl.trim()}
+                                >
+                                  <PlusIcon className="w-4 h-4" />
+                                  Add Image
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1750,51 +1999,111 @@ export default function TemplaitoApp() {
                                 </span>
                               </div>
 
-                              {currentProduct.images &&
-                                currentProduct.images.length > 1 && (
-                                  <div className="flex gap-2 overflow-x-auto pb-2">
-                                    {currentProduct.images.map(
-                                      (image: string, imageIndex: number) => (
-                                        <button
-                                          key={imageIndex}
-                                          onClick={() =>
-                                            handleMultiProductImageSelection(
-                                              selectedProductIndex,
-                                              imageIndex
-                                            )
-                                          }
-                                          className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
-                                            currentSelectedImageIndex ===
+                              {currentProduct.images && (
+                                <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+                                  {currentProduct.images.map(
+                                    (image: string, imageIndex: number) => (
+                                      <button
+                                        key={imageIndex}
+                                        onClick={() =>
+                                          handleMultiProductImageSelection(
+                                            selectedProductIndex,
                                             imageIndex
-                                              ? "border-blue-500 ring-2 ring-blue-200"
-                                              : "border-gray-200 hover:border-gray-300"
-                                          }`}
-                                        >
-                                          <ExternalImage
-                                            src={image}
-                                            alt={`Product ${
-                                              selectedProductIndex + 1
-                                            } image ${imageIndex + 1}`}
-                                            className="w-full h-full object-cover rounded-md"
-                                            width={64}
-                                            height={64}
-                                            onError={(e) => {
-                                              e.currentTarget.style.display =
-                                                "none";
-                                            }}
-                                          />
-                                        </button>
-                                      )
+                                          )
+                                        }
+                                        className={`flex-shrink-0 w-16 h-16 rounded-lg border-2 transition-all duration-200 ${
+                                          currentSelectedImageIndex ===
+                                          imageIndex
+                                            ? "border-blue-500 ring-2 ring-blue-200"
+                                            : "border-gray-200 hover:border-gray-300"
+                                        }`}
+                                      >
+                                        <ExternalImage
+                                          src={image}
+                                          alt={`Product ${
+                                            selectedProductIndex + 1
+                                          } image ${imageIndex + 1}`}
+                                          className="w-full h-full object-cover rounded-md"
+                                          width={64}
+                                          height={64}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                          }}
+                                        />
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Custom Image Input for Multi Product */}
+                              <div className="mt-4 border-t border-gray-200 pt-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="p-1.5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg">
+                                    <PhotoIcon className="w-4 h-4 text-white" />
+                                  </div>
+                                  <h6 className="text-sm font-semibold text-gray-700">
+                                    Add Custom Image for Product {selectedProductIndex + 1}
+                                  </h6>
+                                </div>
+                                <div className="flex gap-3">
+                                  {/* Image Preview */}
+                                  <div className="flex-shrink-0 w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                                    {customImageUrl.trim() ? (
+                                      <ExternalImage
+                                        src={customImageUrl.trim()}
+                                        alt="Preview"
+                                        width={64}
+                                        height={64}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = "none";
+                                          e.currentTarget.parentElement!.innerHTML = `<div class="text-center px-1"><svg class="w-5 h-5 text-red-400 mx-auto mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-red-500">Invalid</span></div>`;
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="text-center">
+                                        <PhotoIcon className="w-6 h-6 text-gray-300 mx-auto" />
+                                        <span className="text-[10px] text-gray-400 mt-0.5 block">Preview</span>
+                                      </div>
                                     )}
                                   </div>
-                                )}
-
-                              {currentProduct.images &&
-                                currentProduct.images.length <= 1 && (
-                                  <div className="text-sm text-gray-500 italic">
-                                    Only one image available for this product
+                                  {/* Input and Button */}
+                                  <div className="flex-1 flex flex-col gap-2">
+                                    <div className="relative">
+                                      <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                      <input
+                                        type="url"
+                                        placeholder="Paste image URL here..."
+                                        className="w-full pl-10 pr-3 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400 placeholder:text-gray-400 transition-all duration-200"
+                                        value={customImageUrl}
+                                        onChange={(e) =>
+                                          setCustomImageUrl(e.target.value)
+                                        }
+                                        onKeyDown={(e) =>
+                                          e.key === "Enter" &&
+                                          (e.preventDefault(),
+                                          handleAddCustomImage())
+                                        }
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs text-gray-400">
+                                        Supports JPG, PNG, WebP
+                                      </span>
+                                      <button
+                                        onClick={handleAddCustomImage}
+                                        className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer transition-all duration-200 flex items-center gap-1.5"
+                                        disabled={!customImageUrl.trim()}
+                                      >
+                                        <PlusIcon className="w-4 h-4" />
+                                        Add Image
+                                      </button>
+                                    </div>
                                   </div>
-                                )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })()}
@@ -1886,29 +2195,52 @@ export default function TemplaitoApp() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Sender name (optional)
                   </label>
-                  {productInfo && baseCountry && countryScrapeResults[baseCountry] && (
-                    <div className="mb-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <svg className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="text-xs text-indigo-700">
-                          <span className="font-medium">Default sender name: </span>
-                          <span className="font-semibold">
-                            {(() => {
-                              const baseResult = countryScrapeResults[baseCountry];
-                              if (baseResult.type === "SINGLE" && baseResult.productInfo?.title) {
-                                return baseResult.productInfo.title;
-                              } else if (baseResult.type === "MULTI" && baseResult.multiProductInfo?.products?.[0]?.title) {
-                                return baseResult.multiProductInfo.products[0].title;
-                              }
-                              return "Product name";
-                            })()}
-                          </span>
+                  {productInfo &&
+                    baseCountry &&
+                    countryScrapeResults[baseCountry] && (
+                      <div className="mb-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <svg
+                            className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <div className="text-xs text-indigo-700">
+                            <span className="font-medium">
+                              Default sender name:{" "}
+                            </span>
+                            <span className="font-semibold">
+                              {(() => {
+                                const baseResult =
+                                  countryScrapeResults[baseCountry];
+                                if (
+                                  baseResult.type === "SINGLE" &&
+                                  baseResult.productInfo?.title
+                                ) {
+                                  return baseResult.productInfo.title;
+                                } else if (
+                                  baseResult.type === "MULTI" &&
+                                  baseResult.multiProductInfo?.products?.[0]
+                                    ?.title
+                                ) {
+                                  return baseResult.multiProductInfo.products[0]
+                                    .title;
+                                }
+                                return "Product name";
+                              })()}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                   <input
                     type="text"
                     value={publishForm.senderName}
@@ -1919,7 +2251,8 @@ export default function TemplaitoApp() {
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    If empty, we&apos;ll use the product name shown above as sender.
+                    If empty, we&apos;ll use the product name shown above as
+                    sender.
                   </p>
                 </div>
 

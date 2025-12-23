@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -53,7 +52,7 @@ model User {
   templateUsage       TemplateUsage[]
   createdPrompts      Prompt[]
   templateGenerations TemplateGeneration[]
-  clients            Client[]
+  clients             Client[]
 }
 
 model Profile {
@@ -192,29 +191,29 @@ model TemplateGeneration {
 }
 
 model Country {
-  code          String                 @id
-  name          String
-  isActive      Boolean                @default(true)
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  code      String   @id
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   clientConfigs   ClientCountryConfig[]
   campaignTargets CampaignCountry[]
 }
 
 model Client {
-  id             String                  @id @default(cuid())
-  userId         String
-  name           String
-  description    String?
-  industry       String?
-  website        String?
-  notes          String?
-  isArchived     Boolean                 @default(false)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  industry    String?
+  website     String?
+  notes       String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  owner          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  owner          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   integrations   ClientIntegration[]
   countryConfigs ClientCountryConfig[]
   campaigns      Campaign[]
@@ -224,73 +223,76 @@ model Client {
 }
 
 model ClientIntegration {
-  id                   String               @id @default(cuid())
+  id                   String              @id @default(cuid())
   clientId             String
   provider             IntegrationProvider
-  status               IntegrationStatus    @default(PENDING)
+  status               IntegrationStatus   @default(PENDING)
   encryptedCredentials String?
   metadata             Json?
   lastSyncedAt         DateTime?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([clientId, provider])
 }
 
 model ClientCountryConfig {
-  id              String     @id @default(cuid())
+  id              String    @id @default(cuid())
   clientId        String
   countryCode     String
-  isActive        Boolean    @default(false)
+  isActive        Boolean   @default(false)
   mailingListId   String?
   mailingListName String?
-  senderEmail     String?    // Sender email for this country (must match SqualoMail)
-  senderName      String?    // Sender name for this country
+  senderEmail     String? // Sender email for this country (must match SqualoMail)
+  senderName      String? // Sender name for this country
   lastSyncedAt    DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  client          Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  country         Country    @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  country Country @relation(fields: [countryCode], references: [code], onDelete: Restrict)
 
   @@unique([clientId, countryCode])
   @@index([countryCode])
 }
 
 model Campaign {
-  id           String           @id @default(cuid())
-  clientId     String
-  name         String
-  description  String?
-  status       CampaignStatus   @default(DRAFT)
-  externalId   String?
-  scheduledAt  DateTime?
-  sentAt       DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id          String         @id @default(cuid())
+  clientId    String
+  name        String
+  description String?
+  status      CampaignStatus @default(DRAFT)
+  externalId  String?
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   countryTargets CampaignCountry[]
+
+  subject    String? @db.Text
+  preheader  String? @db.Text
+  senderName String?
 }
 
 model CampaignCountry {
-  id           String   @id @default(cuid())
-  campaignId   String
-  countryCode  String
+  id            String   @id @default(cuid())
+  campaignId    String
+  countryCode   String
   mailingListId String?
-  externalId   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  externalId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  country      Country  @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  country  Country  @relation(fields: [countryCode], references: [code], onDelete: Restrict)
 
   @@unique([campaignId, countryCode])
   @@index([countryCode])
 }
-
 
 enum DesignEngine {
   CLAUDE
@@ -302,7 +304,6 @@ enum PromptStatus {
   ACTIVE
   ARCHIVED
 }
-
 
 enum IntegrationProvider {
   SQUALOMAIL

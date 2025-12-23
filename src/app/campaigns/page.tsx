@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense, type ReactElement } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  type ReactElement,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomSelect from "@/components/ui/custom-select";
@@ -13,7 +19,10 @@ import {
   XCircleIcon,
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
-import { PageLoadingSpinner, InlineLoadingSpinner } from "@/components/ui/loading-spinner";
+import {
+  PageLoadingSpinner,
+  InlineLoadingSpinner,
+} from "@/components/ui/loading-spinner";
 
 interface CampaignTargetSummary {
   id: string;
@@ -38,6 +47,9 @@ interface CampaignSummary {
   createdAt: string;
   updatedAt: string;
   countryTargets: CampaignTargetSummary[];
+  subject?: string | null;
+  preheader?: string | null;
+  senderName?: string | null;
 }
 
 interface ClientSummary {
@@ -509,6 +521,32 @@ function CampaignsPageContent() {
     setPage(nextPage);
   };
 
+  // Compute effective status based on dates, not just stored status
+  const getEffectiveStatus = (campaign: CampaignSummary): CampaignStatus => {
+    // If explicitly failed or cancelled, use that
+    if (campaign.status === "FAILED" || campaign.status === "CANCELLED") {
+      return campaign.status;
+    }
+
+    // If already sent, it's sent
+    if (campaign.sentAt) {
+      return "SENT";
+    }
+
+    // If scheduled for the future, it's scheduled
+    if (campaign.scheduledAt) {
+      const scheduledDate = new Date(campaign.scheduledAt);
+      if (scheduledDate > new Date()) {
+        return "SCHEDULED";
+      }
+      // Scheduled time has passed but no sentAt - likely sent or sending
+      return "SENT";
+    }
+
+    // No scheduled date = was sent immediately
+    return "SENT";
+  };
+
   const currentStatusStyles = (status: CampaignStatus) =>
     STATUS_STYLES[status] ?? STATUS_STYLES.DRAFT;
 
@@ -661,31 +699,44 @@ function CampaignsPageContent() {
             {activeClientId && !loading && campaigns.length > 0 ? (
               <div className="space-y-4">
                 {campaigns.map((campaign) => {
-                  const statusConfig = currentStatusStyles(campaign.status);
+                  const effectiveStatus = getEffectiveStatus(campaign);
+                  const statusConfig = currentStatusStyles(effectiveStatus);
                   return (
                     <div
                       key={campaign.id}
                       className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
                     >
-                      {/* Header Row */}
+                      {/* Header Row - Subject as main title */}
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-lg font-semibold text-slate-900 truncate">
-                              {campaign.name}
-                            </h3>
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusConfig.className}`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`}
-                              />
-                              {statusConfig.label}
-                            </span>
+                          <div className="flex items-center gap-3 mb-1.5">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+                              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-base font-semibold text-slate-900 truncate">
+                                {campaign.subject || campaign.name}
+                              </h3>
+                              {campaign.preheader && (
+                                <p className="text-xs text-slate-500 truncate mt-0.5">
+                                  {campaign.preheader}
+                                </p>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Compact date info */}
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                          {/* Meta info row */}
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 ml-11">
+                            {campaign.senderName && (
+                              <span className="inline-flex items-center gap-1">
+                                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {campaign.senderName}
+                              </span>
+                            )}
                             <span className="inline-flex items-center gap-1">
                               <ClockIcon className="h-3.5 w-3.5" />
                               {formatDateTime(campaign.createdAt)}
@@ -699,18 +750,21 @@ function CampaignsPageContent() {
                             {!campaign.sentAt && campaign.scheduledAt && (
                               <span className="inline-flex items-center gap-1">
                                 <ArrowPathIcon className="h-3.5 w-3.5 text-blue-500" />
-                                {formatDateTime(campaign.scheduledAt)}
+                                Scheduled {formatDateTime(campaign.scheduledAt)}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        <Link
-                          href={`/clients/${activeClientId}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                        {/* Status Badge */}
+                        <span
+                          className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}
                         >
-                          Manage
-                        </Link>
+                          <span
+                            className={`h-2 w-2 rounded-full ${statusConfig.dot}`}
+                          />
+                          {statusConfig.label}
+                        </span>
                       </div>
 
                       {/* Country Metrics Row - Compact */}
