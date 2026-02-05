@@ -2178,12 +2178,12 @@ export default function TemplaitoApp() {
         </div>
 
         {publishModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 overflow-hidden">
             <div
               className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
               onClick={closePublishModal}
             />
-            <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-8">
+            <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-gray-100 p-8">
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h3 className="text-2xl font-semibold text-gray-900">
