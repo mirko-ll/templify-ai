@@ -218,7 +218,7 @@ export default function EditPromptPage() {
                         label: "Claude Sonnet-4",
                         emoji: "⚡",
                       },
-                      { value: "GPT4O", label: "GPT-4o", emoji: "✨" },
+                      { value: "GPT4O", label: "GPT-5", emoji: "✨" },
                     ]}
                     value={formData.designEngine}
                     onChange={(value) =>

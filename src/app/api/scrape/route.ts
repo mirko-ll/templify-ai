@@ -25,23 +25,15 @@ async function translateTextToEnglish(text: string | null | undefined) {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-2024-11-20",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Translate the provided text to English. Return only the translated text with no additional commentary."
-        },
-        {
-          role: "user",
-          content: trimmed,
-        },
-      ],
+    const response = await openai.responses.create({
+      model: "gpt-5.2",
+            input: `Translate the provided text to English. Return only the translated text with no additional commentary.
+
+Text to translate:
+${trimmed}`,
     });
 
-    const output = completion.choices[0]?.message?.content?.trim();
+    const output = response.output_text?.trim();
     return output && output.length > 0 ? output : text ?? "";
   } catch (error) {
     console.error("Text translation failed", error);
@@ -56,29 +48,22 @@ async function translateHtmlToEnglish(html: string) {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-2024-11-20",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content: `You are a professional email translator. Translate the provided HTML email into English.
+    const response = await openai.responses.create({
+      model: "gpt-5.2",
+            input: `You are a professional email translator. Translate the provided HTML email into English.
 Important rules:
 1. Preserve every HTML tag and attribute exactly as in the original markup.
 2. Do NOT translate or modify template variables (e.g. {{variable}}, {unsubscribe}, {subtag:name}).
 3. Keep all URLs untouched.
 4. Translate only visible copy/content.
 5. Maintain the original tone and style.
-6. Return ONLY the translated HTML markup with no additional commentary.`
-        },
-        {
-          role: "user",
-          content: trimmed,
-        },
-      ],
+6. Return ONLY the translated HTML markup with no additional commentary.
+
+HTML to translate:
+${trimmed}`,
     });
 
-    const output = completion.choices[0]?.message?.content?.trim();
+    const output = response.output_text?.trim();
     return output && output.length > 0 ? output : html;
   } catch (error) {
     console.error("HTML translation failed", error);
@@ -620,20 +605,11 @@ async function processSingleUrl(
   ).join('\n');
 
   // Use structured data when available, shorter AI prompt
-  let extractionResponse;
+  let extractionOutput: string;
   try {
-    extractionResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.1, // Lower temperature for faster, more consistent results
-      max_tokens: 1000, // Limit response size for faster processing
-      messages: [
-        {
-          role: "system",
-          content: "Extract e-commerce product info from webpage content. Return only JSON with required fields.",
-        },
-        {
-          role: "user",
-          content: `Extract product info from this content. Use structured data when available:
+    const extractionResponse = await openai.responses.create({
+      model: "gpt-5-mini",
+            input: `Extract e-commerce product info from webpage content. Return ONLY valid JSON with required fields.
 
 Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
 
@@ -666,46 +642,40 @@ PRICE EXTRACTION:
 3. DO NOT extract prices from quantity/amount selectors (1x, 2x, 3x options)
 4. Ignore: bulk pricing tables, shipping costs, related products
 
-Use structured data above when available. Return full URLs only.`,
-        },
-      ],
-      response_format: { type: "json_object" },
+Use structured data above when available. Return full URLs only. Return ONLY the JSON object, no other text.`,
     });
+    extractionOutput = extractionResponse.output_text || "{}";
   } catch (error: any) {
     // If token limit exceeded, try with much shorter content
     if (error.code === 'context_length_exceeded') {
       const shorterContent = fullContent.substring(0, 10000) + "... [truncated]";
 
-      extractionResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.1,
-        max_tokens: 500,
-        messages: [
-          {
-            role: "system",
-            content: "Extract product info from content. Return JSON only.",
-          },
-          {
-            role: "user",
-            content: `Content: "${shorterContent}"
+      const fallbackResponse = await openai.responses.create({
+        model: "gpt-5-mini",
+                input: `Extract product info from content. Return ONLY valid JSON.
+
+Content: "${shorterContent}"
 
 TITLE: Extract CLEAN product name only. Remove store/site names after dash/pipe/hyphen. Example: "Product - StoreName" → "Product"
 
 PRICES: Must have currency (€,$,Kč,Ft). Find main/largest price. DO NOT use prices from quantity selectors (1x,2x,3x). Ignore bulk/shipping. Two prices: regularPrice=higher, salePrice=lower. One price: salePrice=empty.
 
-Return: {"language": "en", "title": "", "description": "", "regularPrice": "", "salePrice": "", "discount": "", "bestImageUrl": "", "allImages": []}`,
-          },
-        ],
-        response_format: { type: "json_object" },
+Return ONLY: {"language": "en", "title": "", "description": "", "regularPrice": "", "salePrice": "", "discount": "", "bestImageUrl": "", "allImages": []}`,
       });
+      extractionOutput = fallbackResponse.output_text || "{}";
     } else {
       throw error;
     }
   }
 
-  const extractedData = JSON.parse(
-    extractionResponse.choices[0].message.content || "{}"
-  );
+  // Parse JSON from response, handling potential markdown code blocks
+  let jsonStr = extractionOutput.trim();
+  if (jsonStr.startsWith("```json")) {
+    jsonStr = jsonStr.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  } else if (jsonStr.startsWith("```")) {
+    jsonStr = jsonStr.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  }
+  const extractedData = JSON.parse(jsonStr || "{}");
 
   // Use structured data as fallback when AI extraction fails
   const productInfo: ProductInfo = {
@@ -777,24 +747,17 @@ async function generateEmailTemplate(
     const singleProductInfo = productInfo as ProductInfo;
 
     // Step 1: OpenAI generates the email content/copy
-    const contentResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2, // Slightly higher for creative copy
-      max_tokens: 1500, // Limit for faster response
-      messages: [
-        {
-          role: "system",
-          content: `Email copywriter. Write in ${singleProductInfo.language}. Return JSON with subject, headline, bodyText, ctaText, preheader.`,
-        },
-        {
-          role: "user",
-          content: `Product: ${singleProductInfo.title}
+    const contentResponse = await openai.responses.create({
+      model: "gpt-5-mini",
+            input: `Email copywriter. Write in ${singleProductInfo.language}. Return ONLY valid JSON with subject, headline, bodyText, ctaText, preheader.
+
+Product: ${singleProductInfo.title}
 Price: ${singleProductInfo.salePrice || singleProductInfo.regularPrice}
 ${singleProductInfo.discount ? `Discount: ${singleProductInfo.discount}` : ''}
 
 Template: ${templateType.name}
 
-Return JSON:
+Return ONLY this JSON format:
 {
   "subject": "Email subject line",
   "headline": "Main headline",
@@ -802,14 +765,15 @@ Return JSON:
   "ctaText": "CTA text",
   "preheader": "Preheader text"
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
     });
 
-    const emailContent = JSON.parse(
-      contentResponse.choices[0].message.content || "{}"
-    );
+    let contentJson = (contentResponse.output_text || "{}").trim();
+    if (contentJson.startsWith("```json")) {
+      contentJson = contentJson.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+    } else if (contentJson.startsWith("```")) {
+      contentJson = contentJson.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
+    const emailContent = JSON.parse(contentJson);
 
     // Step 2: Generate HTML design using the specified AI engine
     let result;
@@ -829,21 +793,11 @@ async function generateWithGPT4O(
   productUrl: string,
   templateType: any
 ) {
-  const designResponse = await openai.chat.completions.create({
-    model: "gpt-4o-2024-11-20",         // <- pin snapshot
-    temperature: 0.2,                   // a touch of creativity for design
-    top_p: 1,
-    presence_penalty: 0,
-    frequency_penalty: 0,
-    seed: 42,
-    messages: [
-      {
-        role: "system",
-        content: templateType.system
-      },
-      {
-        role: "user",
-        content: `You are an expert HTML email developer. Create a single product email template.
+  const designResponse = await openai.responses.create({
+    model: "gpt-5.2",
+        input: `${templateType.system}
+
+You are an expert HTML email developer. Create a single product email template.
 
 CRITICAL INSTRUCTION: You must return ONLY pure HTML code. Do NOT wrap it in JSON. Do NOT use markdown code blocks. Do NOT include explanations.
 
@@ -885,13 +839,16 @@ Example: {{product_image}} not appearing in the template means we do not have a 
 
 CRITICAL: For unsubscribe link, use EXACTLY this format: {unsubscribe}UNSUBSCRIBE{/unsubscribe} - do NOT use href attribute.
 
-REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`
-      }
-    ],
-    max_tokens: 4000,
+REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`,
   });
 
-  const htmlContent = designResponse.choices[0].message.content?.trim() || "";
+  let htmlContent = (designResponse.output_text || "").trim();
+  // Remove markdown code blocks if present
+  if (htmlContent.startsWith("```html")) {
+    htmlContent = htmlContent.replace(/^```html\s*/, "").replace(/\s*```$/, "");
+  } else if (htmlContent.startsWith("```")) {
+    htmlContent = htmlContent.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  }
 
   return {
     html: htmlContent,
@@ -907,7 +864,7 @@ async function generateWithClaude(
   templateType: any
 ) {
   const designResponse = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 4000,
     messages: [
       {

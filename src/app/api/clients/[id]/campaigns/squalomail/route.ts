@@ -80,6 +80,21 @@ function normalizeImageOverrides(raw: unknown): ImageOverridesPayload | undefine
   return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
+function normalizeMailingListOverrides(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const result: Record<string, string> = {};
+  for (const [countryCode, listId] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof listId === "string" && listId.trim()) {
+      result[countryCode.toUpperCase()] = listId.trim();
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 async function ensureIntegrationConnected(clientId: string) {
   const integration = await prisma.clientIntegration.findFirst({
     where: {
@@ -139,6 +154,7 @@ export async function POST(
     emailTemplate,
     countryResults,
     imageOverrides,
+    mailingListOverrides,
   } = body ?? {};
 
   if (!emailTemplate || typeof emailTemplate !== "object") {
@@ -164,6 +180,7 @@ export async function POST(
 
   try {
     const normalizedOverrides = normalizeImageOverrides(imageOverrides);
+    const normalizedMailingListOverrides = normalizeMailingListOverrides(mailingListOverrides);
 
     const payload = {
       clientId: id,
@@ -175,6 +192,7 @@ export async function POST(
       emailTemplate,
       countryResults,
       imageOverrides: normalizedOverrides,
+      mailingListOverrides: normalizedMailingListOverrides,
     };
 
     const result = await callTemplaitoBackend({

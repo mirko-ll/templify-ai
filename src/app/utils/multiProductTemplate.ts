@@ -29,59 +29,54 @@ export async function generateMultiProductTemplate(
   let emailContent;
 
   if (templateType.designEngine === 'GPT4O') {
-    // Use GPT-4O for both content and design
-    const contentResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.`,
-        },
-        {
-          role: "user",
-          content: `${templateType.user
+    // Use GPT-5 for both content and design
+    const contentResponse = await openai.responses.create({
+      model: "gpt-5-mini",
+            input: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.
+
+${templateType.user
             .replace(/\{\{product_names\}\}/g, productNames)
             .replace(/\{\{product_links\}\}/g, productLinks)
             .replace(/\{\{product_images\}\}/g, productImages)
             .replace(/\{\{product_prices\}\}/g, productPrices)
             .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
-                    
-                    Products details:
-                    ${multiProductInfo.products
+
+Products details:
+${multiProductInfo.products
               .map(
                 (product, index) => `
-                    Product ${index + 1}:
-                    Name: ${product.title}
-                    Description: ${product.description}
-                    URL: ${urls[index] || urls[0]}
-                    Best Image: ${product.bestImageUrl}
-                    All Images: ${product.images.join(", ")}
-                    Regular Price: ${product.regularPrice}
-                    Sale Price: ${product.salePrice}
-                    Discount: ${product.discount}
-                    `
+Product ${index + 1}:
+Name: ${product.title}
+Description: ${product.description}
+URL: ${urls[index] || urls[0]}
+Best Image: ${product.bestImageUrl}
+All Images: ${product.images.join(", ")}
+Regular Price: ${product.regularPrice}
+Sale Price: ${product.salePrice}
+Discount: ${product.discount}
+`
               )
               .join("")}
-                    
-                    Generate email content in ${multiProductInfo.language
-            } language.
-                    
-                    Please return a JSON object with:
-                    {
-                        "subject": "Email subject line",
-                        "headline": "Main headline",
-                        "bodyText": "Main body text/description",
-                        "ctaText": "Call to action button text",
-                        "preheader": "Email preheader text"
-                    }`,
-        },
-      ],
-      response_format: { type: "json_object" },
+
+Generate email content in ${multiProductInfo.language} language.
+
+Please return ONLY a JSON object with:
+{
+    "subject": "Email subject line",
+    "headline": "Main headline",
+    "bodyText": "Main body text/description",
+    "ctaText": "Call to action button text",
+    "preheader": "Email preheader text"
+}`,
     });
 
-    emailContent = JSON.parse(
-      contentResponse.choices[0].message.content || "{}"
-    );
+    let contentJson = (contentResponse.output_text || "{}").trim();
+    if (contentJson.startsWith("```json")) {
+      contentJson = contentJson.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+    } else if (contentJson.startsWith("```")) {
+      contentJson = contentJson.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
+    emailContent = JSON.parse(contentJson);
   } else {
     // Use Claude for content generation
     const contentResponse = await anthropic.messages.create({
@@ -142,17 +137,12 @@ export async function generateMultiProductTemplate(
 
   // Step 2: Generate HTML design using the specified AI engine
   if (templateType.designEngine === 'GPT4O') {
-    // Use GPT-4O for HTML generation
-    const designResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert HTML email developer. Create responsive, cross-client compatible email templates."
-        },
-        {
-          role: "user",
-          content: `Create a multi-product landing page email template using this content:
+    // Use GPT-5 for HTML generation
+    const designResponse = await openai.responses.create({
+      model: "gpt-5.2",
+            input: `You are an expert HTML email developer. Create responsive, cross-client compatible email templates.
+
+Create a multi-product landing page email template using this content:
 
 CRITICAL: Return ONLY pure HTML code. Start with <!DOCTYPE html> and end with </html>
 
@@ -162,13 +152,18 @@ URLs: ${JSON.stringify(urls)}
 
 ${templateType.system}
 
-Create a responsive email template that showcases all products effectively with modern design.`
-        }
-      ]
+Create a responsive email template that showcases all products effectively with modern design.`,
     });
 
+    let htmlContent = (designResponse.output_text || "").trim();
+    if (htmlContent.startsWith("```html")) {
+      htmlContent = htmlContent.replace(/^```html\s*/, "").replace(/\s*```$/, "");
+    } else if (htmlContent.startsWith("```")) {
+      htmlContent = htmlContent.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
+
     return {
-      html: designResponse.choices[0].message.content || "",
+      html: htmlContent,
       subject: emailContent.subject || "Multi-Product Offer",
     };
   } else {

@@ -24,6 +24,7 @@ import {
   PhotoIcon,
 } from "@heroicons/react/24/outline";
 import ExternalImage from "@/components/ui/external-image";
+import MailingListOverrideSection from "@/components/publish/MailingListOverrideSection";
 import { templateUIConfig } from "@/lib/template-config";
 import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 import type {
@@ -77,6 +78,20 @@ interface DatabasePrompt {
 interface PublishImageOverrides {
   singleImageIndex?: number;
   multiImageSelections?: Record<number, number>;
+}
+
+interface SqualoMailingList {
+  id: string;
+  name: string;
+}
+
+interface SqualoIntegration {
+  id: string;
+  provider: string;
+  status: string;
+  metadata?: {
+    lists?: SqualoMailingList[];
+  } | null;
 }
 
 function buildCountryUrlState(
@@ -229,7 +244,16 @@ export default function TemplaitoApp() {
     senderName: "",
   });
   const [customImageUrl, setCustomImageUrl] = useState("");
+  const [mailingListOverrides, setMailingListOverrides] = useState<Record<string, string>>({});
+  const [overrideSectionExpanded, setOverrideSectionExpanded] = useState(false);
+  const [integration, setIntegration] = useState<SqualoIntegration | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
+
+  const mailingLists = useMemo(() => {
+    const lists = integration?.metadata?.lists;
+    return Array.isArray(lists) ? lists : [];
+  }, [integration]);
+
   // Fetch available prompts on component mount
   useEffect(() => {
     fetchActivePrompts();
@@ -349,6 +373,19 @@ export default function TemplaitoApp() {
       setCountryUrls((previous) => buildCountryUrlState(eligible, previous));
       setSingleUrlMode(false); // Disable single URL mode when client is active
       setError("");
+
+      // Fetch integration to get available mailing lists for overrides
+      try {
+        const integrationResponse = await fetch(`/api/clients/${clientId}/integration/squalomail`);
+        if (integrationResponse.ok) {
+          const integrationData = await integrationResponse.json();
+          setIntegration(integrationData.integration ?? null);
+        } else {
+          setIntegration(null);
+        }
+      } catch {
+        setIntegration(null);
+      }
     } catch (err) {
       console.error(err);
       setActiveClientId(null);
@@ -789,6 +826,8 @@ export default function TemplaitoApp() {
     if (!publishLoading) {
       setPublishModalOpen(false);
       setPublishError("");
+      setMailingListOverrides({});
+      setOverrideSectionExpanded(false);
     }
   };
 
@@ -851,6 +890,9 @@ export default function TemplaitoApp() {
             emailTemplate: originalTemplate ?? template,
             countryResults: countryScrapeResults,
             imageOverrides: buildImageOverrides(),
+            mailingListOverrides: Object.keys(mailingListOverrides).length > 0
+              ? mailingListOverrides
+              : undefined,
           }),
         }
       );
@@ -873,6 +915,8 @@ export default function TemplaitoApp() {
         senderName: "",
       });
       setPublishError("");
+      setMailingListOverrides({});
+      setOverrideSectionExpanded(false);
       setGlobalToast(successMessage);
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(
@@ -2139,7 +2183,7 @@ export default function TemplaitoApp() {
               className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
               onClick={closePublishModal}
             />
-            <div className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-8">
+            <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-8">
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h3 className="text-2xl font-semibold text-gray-900">
@@ -2272,6 +2316,33 @@ export default function TemplaitoApp() {
                     Leave empty to send immediately after publishing.
                   </p>
                 </div>
+
+                {countryConfigs.length > 0 && mailingLists.length > 0 && Object.keys(countryScrapeResults).length > 0 && (
+                  <MailingListOverrideSection
+                    countryConfigs={countryConfigs
+                      .filter((config) => countryScrapeResults[config.countryCode])
+                      .map((config) => ({
+                        countryCode: config.countryCode,
+                        countryName: config.country?.name || config.countryCode,
+                        mailingListId: config.mailingListId || "",
+                        mailingListName: config.mailingListName || "",
+                      }))}
+                    mailingLists={mailingLists}
+                    overrides={mailingListOverrides}
+                    onOverrideChange={(countryCode, listId) => {
+                      setMailingListOverrides((prev) => {
+                        if (!listId) {
+                          const next = { ...prev };
+                          delete next[countryCode];
+                          return next;
+                        }
+                        return { ...prev, [countryCode]: listId };
+                      });
+                    }}
+                    isExpanded={overrideSectionExpanded}
+                    onToggle={() => setOverrideSectionExpanded((prev) => !prev)}
+                  />
+                )}
 
                 {publishError && (
                   <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm">

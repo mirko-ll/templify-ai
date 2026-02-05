@@ -249,7 +249,7 @@ export default function AdminPromptsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">
-                GPT-4o Templates
+                GPT-5 Templates
               </p>
               <p className="text-3xl font-bold text-green-600">
                 {prompts.filter((p) => p.designEngine === "GPT4O").length}
@@ -302,7 +302,7 @@ export default function AdminPromptsPage() {
               options={[
                 { value: "all", label: "All Engines", emoji: "🤖" },
                 { value: "CLAUDE", label: "Claude", emoji: "⚡" },
-                { value: "GPT4O", label: "GPT-4o", emoji: "✨" },
+                { value: "GPT4O", label: "GPT-5", emoji: "✨" },
               ]}
               value={filterEngine}
               onChange={setFilterEngine}
