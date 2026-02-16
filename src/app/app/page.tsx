@@ -2215,7 +2215,7 @@ export default function TemplaitoApp() {
                     onChange={(e) =>
                       updatePublishForm("subject", e.target.value)
                     }
-                    placeholder="e.g. {subtag:name}, Exclusive weekend offer"
+                    placeholder="e.g. {subtag:name}, Get it for only {price}!"
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
                   />
                 </div>
@@ -2230,9 +2230,12 @@ export default function TemplaitoApp() {
                     onChange={(e) =>
                       updatePublishForm("preheader", e.target.value)
                     }
-                    placeholder="Short teaser that appears in the inbox preview"
+                    placeholder="e.g. Now only {price} - don't miss out"
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Available variables: {'{subtag:name}'} (subscriber name), {'{price}'} (product price)
+                  </p>
                 </div>
 
                 <div>

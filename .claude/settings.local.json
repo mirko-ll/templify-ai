@@ -9,7 +9,8 @@
       "Bash(cd:*)",
       "Bash(dir \"C:\\Users\\User\\Desktop\\Dev Projects\\templify-ai\\src\" /B)",
       "Bash(dir /s /b \"C:\\Users\\User\\Desktop\\Dev Projects\\templaito-backend\")",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],
