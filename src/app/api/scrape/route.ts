@@ -86,6 +86,8 @@ async function buildPreviewTemplate(template: { html: string; subject?: string |
   };
 }
 
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
