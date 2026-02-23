@@ -276,6 +276,7 @@ model Campaign {
   subject    String? @db.Text
   preheader  String? @db.Text
   senderName String?
+  utmMedium  String?
 }
 
 model CampaignCountry {
@@ -283,9 +284,18 @@ model CampaignCountry {
   campaignId    String
   countryCode   String
   mailingListId String?
-  externalId    String?
+  externalId    String? // SqualoMail newsletter ID (set AFTER push)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // Prepared newsletter data (stored at creation, consumed by cron)
+  preparedHtml      String? @db.LongText
+  preparedSubject   String? @db.Text
+  preparedPreheader String? @db.Text
+  preparedFromEmail String?
+  preparedFromName  String?
+  preparedName      String?
+  isPushed          Boolean @default(false)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   country  Country  @relation(fields: [countryCode], references: [code], onDelete: Restrict)

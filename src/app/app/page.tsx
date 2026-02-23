@@ -20,6 +20,7 @@ import {
   PaintBrushIcon,
   BeakerIcon,
   ArrowTopRightOnSquareIcon,
+  ArrowPathIcon,
   PlusIcon,
   PhotoIcon,
 } from "@heroicons/react/24/outline";
@@ -1129,6 +1130,22 @@ export default function TemplaitoApp() {
         doc.open();
         doc.write(updatedHtml);
         doc.close();
+
+        // Auto-resize iframe to fit content (no internal scrollbar)
+        const resizeIframe = () => {
+          if (previewRef.current?.contentDocument?.body) {
+            const contentHeight = previewRef.current.contentDocument.body.scrollHeight;
+            previewRef.current.style.height = `${contentHeight + 40}px`;
+          }
+        };
+
+        // Resize after content loads (including images)
+        if (previewRef.current.contentWindow) {
+          previewRef.current.contentWindow.addEventListener("load", resizeIframe);
+        }
+        // Also resize immediately for cached content
+        setTimeout(resizeIframe, 100);
+        setTimeout(resizeIframe, 500);
       }
     }
   }, [
@@ -1247,7 +1264,7 @@ export default function TemplaitoApp() {
             </div>
           </header>
 
-          <div className="max-w-7xl mx-auto px-6">
+          <div className={step === "results" ? "max-w-[1600px] mx-auto px-4" : "max-w-7xl mx-auto px-6"}>
             {step === "input" && (
               <div className="max-w-4xl mx-auto">
                 {/* Input Form */}
@@ -1788,6 +1805,15 @@ export default function TemplaitoApp() {
                       >
                         Try Another Style
                       </button>
+                      {selectedTemplateType !== null && (
+                        <button
+                          onClick={() => handleTemplateSelection(selectedTemplateType)}
+                          className="bg-white/20 hover:bg-white/30 cursor-pointer px-4 py-2 rounded-xl transition-colors duration-200 flex items-center gap-2"
+                        >
+                          <ArrowPathIcon className="w-4 h-4" />
+                          Regenerate
+                        </button>
+                      )}
                       <button
                         onClick={resetForm}
                         className="bg-white/20 hover:bg-white/30 cursor-pointer px-4 py-2 rounded-xl transition-colors duration-200"
@@ -1798,7 +1824,7 @@ export default function TemplaitoApp() {
                   </div>
                 </div>
 
-                <div className="flex flex-col h-[75vh]">
+                <div className="flex flex-col">
                   {/* Template Header */}
                   <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -2155,11 +2181,12 @@ export default function TemplaitoApp() {
                     )}
 
                   {/* Template Preview */}
-                  <div className="flex-1 p-4 bg-gray-100">
+                  <div className="p-2 bg-gray-100">
                     <iframe
                       ref={previewRef}
                       title="Email preview"
-                      className="w-full h-full bg-white rounded-2xl shadow-lg border-2 border-gray-200"
+                      className="w-full bg-white rounded-2xl shadow-lg border-2 border-gray-200"
+                      style={{ minHeight: "600px" }}
                     />
                   </div>
                 </div>

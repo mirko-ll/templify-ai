@@ -10,7 +10,8 @@
       "Bash(dir \"C:\\Users\\User\\Desktop\\Dev Projects\\templify-ai\\src\" /B)",
       "Bash(dir /s /b \"C:\\Users\\User\\Desktop\\Dev Projects\\templaito-backend\")",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": [],
