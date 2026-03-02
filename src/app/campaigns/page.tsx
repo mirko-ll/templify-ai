@@ -97,17 +97,19 @@ function computeCampaignAggregates(
   metricsMap: Record<string, NewsletterMetrics>
 ): CampaignAggregateMetrics | null {
   let totalSent = 0;
-  let totalOpens = 0;
   let totalClicks = 0;
+  let weightedOpenRate = 0;
+  let weightedClickRate = 0;
   let countryCount = 0;
 
   for (const target of campaign.countryTargets) {
     if (!target.externalId) continue;
     const stats = metricsMap[target.externalId];
-    if (!stats) continue;
+    if (!stats || stats.sentTotal === 0) continue;
     totalSent += stats.sentTotal;
-    totalOpens += stats.openTotal;
     totalClicks += stats.clickTotal;
+    weightedOpenRate += stats.openRate * stats.sentTotal;
+    weightedClickRate += stats.clickRate * stats.sentTotal;
     countryCount++;
   }
 
@@ -115,10 +117,10 @@ function computeCampaignAggregates(
 
   return {
     totalSent,
-    totalOpens,
+    totalOpens: 0,
     totalClicks,
-    avgOpenRate: totalOpens / totalSent,
-    avgClickRate: totalClicks / totalSent,
+    avgOpenRate: weightedOpenRate / totalSent,
+    avgClickRate: weightedClickRate / totalSent,
     countryCount,
   };
 }
