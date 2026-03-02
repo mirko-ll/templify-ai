@@ -154,6 +154,7 @@ export async function GET(request: NextRequest) {
     sentAt: campaign.sentAt ? campaign.sentAt.toISOString() : null,
     createdAt: campaign.createdAt.toISOString(),
     updatedAt: campaign.updatedAt.toISOString(),
+    canResend: campaign.countryTargets.some((t) => t.preparedHtml != null),
     countryTargets: campaign.countryTargets.map((target) => ({
       id: target.id,
       countryCode: target.countryCode,

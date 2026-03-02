@@ -50,6 +50,7 @@ interface CampaignSummary {
   subject?: string | null;
   preheader?: string | null;
   senderName?: string | null;
+  canResend?: boolean;
 }
 
 interface ClientSummary {
@@ -80,6 +81,46 @@ interface NewsletterMetrics {
   clickTotal: number;
   openRate: number;
   clickRate: number;
+}
+
+interface CampaignAggregateMetrics {
+  totalSent: number;
+  totalOpens: number;
+  totalClicks: number;
+  avgOpenRate: number;
+  avgClickRate: number;
+  countryCount: number;
+}
+
+function computeCampaignAggregates(
+  campaign: CampaignSummary,
+  metricsMap: Record<string, NewsletterMetrics>
+): CampaignAggregateMetrics | null {
+  let totalSent = 0;
+  let totalOpens = 0;
+  let totalClicks = 0;
+  let countryCount = 0;
+
+  for (const target of campaign.countryTargets) {
+    if (!target.externalId) continue;
+    const stats = metricsMap[target.externalId];
+    if (!stats) continue;
+    totalSent += stats.sentTotal;
+    totalOpens += stats.openTotal;
+    totalClicks += stats.clickTotal;
+    countryCount++;
+  }
+
+  if (countryCount === 0 || totalSent === 0) return null;
+
+  return {
+    totalSent,
+    totalOpens,
+    totalClicks,
+    avgOpenRate: totalOpens / totalSent,
+    avgClickRate: totalClicks / totalSent,
+    countryCount,
+  };
 }
 
 const STATUS_OPTIONS: Array<{ value: CampaignStatus | "ALL"; label: string }> =
@@ -215,6 +256,9 @@ function CampaignsPageContent() {
     null
   );
   const [publishToast, setPublishToast] = useState<string | null>(null);
+  const [resendTarget, setResendTarget] = useState<CampaignSummary | null>(null);
+  const [resendDate, setResendDate] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
 
   const clientOptions = useMemo(
     () =>
@@ -514,6 +558,40 @@ function CampaignsPageContent() {
     loadCampaigns(activeClientId, page).finally(() => setRefreshing(false));
   };
 
+  const handleResend = async () => {
+    if (!resendTarget || !resendDate || resendLoading) return;
+
+    setResendLoading(true);
+    try {
+      const response = await fetch("/api/campaigns/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: resendTarget.id,
+          sendDate: new Date(resendDate).toISOString(),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to resend campaign");
+      }
+
+      setResendTarget(null);
+      setResendDate("");
+      setPublishToast("Campaign resend scheduled successfully");
+      if (activeClientId) {
+        loadCampaigns(activeClientId, page, { silent: true });
+      }
+    } catch (err) {
+      setPublishToast(
+        err instanceof Error ? err.message : "Failed to resend campaign"
+      );
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   const goToPage = (nextPage: number) => {
     if (nextPage < 1 || nextPage > pagination.totalPages || nextPage === page) {
       return;
@@ -557,6 +635,51 @@ function CampaignsPageContent() {
           <div className="flex items-start gap-3">
             <div className="mt-1 h-2 w-2 rounded-full bg-indigo-500" />
             <div className="text-sm text-indigo-700">{publishToast}</div>
+          </div>
+        </div>
+      )}
+
+      {resendTarget && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Resend campaign
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {resendTarget.subject || resendTarget.name}
+            </p>
+
+            <label className="mt-5 block text-sm font-medium text-slate-700">
+              New send date &amp; time
+            </label>
+            <input
+              type="datetime-local"
+              value={resendDate}
+              onChange={(e) => setResendDate(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setResendTarget(null);
+                  setResendDate("");
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 cursor-pointer"
+                disabled={resendLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={!resendDate || resendLoading}
+                className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                {resendLoading ? "Scheduling..." : "Schedule resend"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -756,20 +879,93 @@ function CampaignsPageContent() {
                           </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <span
-                          className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}
-                        >
+                        {/* Status Badge + Resend */}
+                        <div className="flex-shrink-0 flex items-center gap-2">
+                          {campaign.canResend && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResendTarget(campaign);
+                                setResendDate("");
+                              }}
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                              title="Resend campaign"
+                            >
+                              <ArrowPathIcon className="h-3.5 w-3.5" />
+                              Resend
+                            </button>
+                          )}
                           <span
-                            className={`h-2 w-2 rounded-full ${statusConfig.dot}`}
-                          />
-                          {statusConfig.label}
-                        </span>
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full ${statusConfig.dot}`}
+                            />
+                            {statusConfig.label}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Country Metrics Row - Compact */}
+                      {/* Metrics Section */}
                       {campaign.countryTargets.length > 0 && (
                         <div className="mt-4 pt-4 border-t border-slate-100">
+                          {/* Aggregate Campaign Totals */}
+                          {(() => {
+                            const agg = computeCampaignAggregates(campaign, metrics);
+                            if (!agg) return null;
+                            return (
+                              <div className="mb-3 flex items-center gap-1 rounded-xl bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 px-4 py-2.5">
+                                <div className="flex items-center gap-4 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    <span className="text-[11px] font-medium text-slate-500">Open rate</span>
+                                    <span className="text-sm font-bold text-emerald-600 tabular-nums">
+                                      {formatPercentage(agg.avgOpenRate)}
+                                    </span>
+                                  </div>
+
+                                  <div className="h-3 w-px bg-slate-200" />
+
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                                    <span className="text-[11px] font-medium text-slate-500">Click rate</span>
+                                    <span className="text-sm font-bold text-indigo-600 tabular-nums">
+                                      {formatPercentage(agg.avgClickRate)}
+                                    </span>
+                                  </div>
+
+                                  <div className="h-3 w-px bg-slate-200" />
+
+                                  <div className="flex items-center gap-1.5">
+                                    <svg className="h-3 w-3 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                                    </svg>
+                                    <span className="text-[11px] font-medium text-slate-500">Clicks</span>
+                                    <span className="text-sm font-bold text-violet-600 tabular-nums">
+                                      {formatCount(agg.totalClicks)}
+                                    </span>
+                                  </div>
+
+                                  <div className="h-3 w-px bg-slate-200" />
+
+                                  <div className="flex items-center gap-1.5">
+                                    <svg className="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                                    </svg>
+                                    <span className="text-[11px] font-medium text-slate-500">Sent</span>
+                                    <span className="text-sm font-bold text-slate-700 tabular-nums">
+                                      {formatCount(agg.totalSent)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <span className="ml-auto text-[10px] font-medium text-slate-400">
+                                  {agg.countryCount} {agg.countryCount === 1 ? "country" : "countries"}
+                                </span>
+                              </div>
+                            );
+                          })()}
+
                           {/* Country Chips Row */}
                           <div className="flex flex-wrap gap-2">
                             {campaign.countryTargets.map((target) => {
@@ -801,7 +997,7 @@ function CampaignsPageContent() {
                                       <span className="text-emerald-600 font-semibold">
                                         {formatPercentage(stats.openRate)}
                                       </span>
-                                      <span className="text-slate-300">•</span>
+                                      <span className="text-slate-300">&middot;</span>
                                       <span className="text-indigo-600 font-semibold">
                                         {formatPercentage(stats.clickRate)}
                                       </span>
