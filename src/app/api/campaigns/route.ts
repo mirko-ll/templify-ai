@@ -160,6 +160,7 @@ export async function GET(request: NextRequest) {
       countryCode: target.countryCode,
       countryName: target.country?.name ?? null,
       mailingListId: target.mailingListId,
+      mailingListName: target.mailingListName ?? null,
       externalId: target.externalId,
     })),
   }));

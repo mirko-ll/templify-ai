@@ -80,15 +80,21 @@ function normalizeImageOverrides(raw: unknown): ImageOverridesPayload | undefine
   return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
-function normalizeMailingListOverrides(raw: unknown): Record<string, string> | undefined {
+function normalizeMailingListOverrides(raw: unknown): Record<string, string[]> | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return undefined;
   }
 
-  const result: Record<string, string> = {};
-  for (const [countryCode, listId] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof listId === "string" && listId.trim()) {
-      result[countryCode.toUpperCase()] = listId.trim();
+  const result: Record<string, string[]> = {};
+  for (const [countryCode, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(value)) {
+      const ids = value.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim());
+      if (ids.length > 0) {
+        result[countryCode.toUpperCase()] = ids;
+      }
+    } else if (typeof value === "string" && value.trim()) {
+      // Backward compat: single string -> array of one
+      result[countryCode.toUpperCase()] = [value.trim()];
     }
   }
 
@@ -155,6 +161,7 @@ export async function POST(
     countryResults,
     imageOverrides,
     mailingListOverrides,
+    mailingListNames,
   } = body ?? {};
 
   if (!emailTemplate || typeof emailTemplate !== "object") {
@@ -193,6 +200,7 @@ export async function POST(
       countryResults,
       imageOverrides: normalizedOverrides,
       mailingListOverrides: normalizedMailingListOverrides,
+      mailingListNames: mailingListNames && typeof mailingListNames === "object" ? mailingListNames : undefined,
     };
 
     const result = await callTemplaitoBackend({

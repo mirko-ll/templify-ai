@@ -245,7 +245,7 @@ export default function TemplaitoApp() {
     senderName: "",
   });
   const [customImageUrl, setCustomImageUrl] = useState("");
-  const [mailingListOverrides, setMailingListOverrides] = useState<Record<string, string>>({});
+  const [mailingListOverrides, setMailingListOverrides] = useState<Record<string, string[]>>({});
   const [overrideSectionExpanded, setOverrideSectionExpanded] = useState(false);
   const [integration, setIntegration] = useState<SqualoIntegration | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
@@ -891,9 +891,12 @@ export default function TemplaitoApp() {
             emailTemplate: originalTemplate ?? template,
             countryResults: countryScrapeResults,
             imageOverrides: buildImageOverrides(),
-            mailingListOverrides: Object.keys(mailingListOverrides).length > 0
+            mailingListOverrides: Object.values(mailingListOverrides).some((v) => v.length > 0)
               ? mailingListOverrides
               : undefined,
+            mailingListNames: Object.fromEntries(
+              mailingLists.map((l: { id: string; name: string }) => [l.id, l.name])
+            ),
           }),
         }
       );
@@ -2359,14 +2362,14 @@ export default function TemplaitoApp() {
                       }))}
                     mailingLists={mailingLists}
                     overrides={mailingListOverrides}
-                    onOverrideChange={(countryCode, listId) => {
+                    onOverrideChange={(countryCode, listIds) => {
                       setMailingListOverrides((prev) => {
-                        if (!listId) {
+                        if (listIds.length === 0) {
                           const next = { ...prev };
                           delete next[countryCode];
                           return next;
                         }
-                        return { ...prev, [countryCode]: listId };
+                        return { ...prev, [countryCode]: listIds };
                       });
                     }}
                     isExpanded={overrideSectionExpanded}

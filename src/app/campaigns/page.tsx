@@ -29,6 +29,7 @@ interface CampaignTargetSummary {
   countryCode: string;
   countryName: string | null;
   mailingListId: string | null;
+  mailingListName: string | null;
   externalId: string | null;
 }
 
@@ -994,6 +995,11 @@ function CampaignsPageContent() {
                                   <span className="font-semibold text-slate-700">
                                     {target.countryCode}
                                   </span>
+                                  {target.mailingListName && (
+                                    <span className="text-[10px] text-slate-400 max-w-[120px] truncate">
+                                      {target.mailingListName}
+                                    </span>
+                                  )}
                                   {stats ? (
                                     <div className="flex items-center gap-2 text-[11px]">
                                       <span className="text-emerald-600 font-semibold">
