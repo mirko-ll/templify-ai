@@ -7,6 +7,7 @@ import {
   useMemo,
   FormEvent,
   useCallback,
+  Suspense,
 } from "react";
 import type { SyntheticEvent } from "react";
 import { useSession } from "next-auth/react";
@@ -150,7 +151,7 @@ function extractCountryFromUrl(url: string): string | null {
     return null;
   }
 }
-export default function TemplaitoApp() {
+function TemplaitoApp() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2755,5 +2756,13 @@ export default function TemplaitoApp() {
         `}</style>
       </div>
     </>
+  );
+}
+
+export default function TemplaitoAppPage() {
+  return (
+    <Suspense fallback={null}>
+      <TemplaitoApp />
+    </Suspense>
   );
 }
