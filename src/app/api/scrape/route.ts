@@ -93,12 +93,59 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     const body = await request.json();
 
-    const { url, templateType, isTest, countryUrls, singleUrlMode } = body ?? {};
+    const {
+      url,
+      templateType,
+      isTest,
+      countryUrls,
+      singleUrlMode,
+      regenerateOnly,
+      productInfo: providedProductInfo,
+    } = body ?? {};
 
     const hasCountryPayload =
       countryUrls &&
       typeof countryUrls === "object" &&
       !Array.isArray(countryUrls);
+
+    // Regenerate-only mode: skip scraping, regenerate email from supplied productInfo + new template.
+    if (regenerateOnly) {
+      if (!providedProductInfo) {
+        return NextResponse.json(
+          { error: "productInfo is required when regenerateOnly is true" },
+          { status: 400 }
+        );
+      }
+      if (!templateType) {
+        return NextResponse.json(
+          { error: "Template type is required" },
+          { status: 400 }
+        );
+      }
+
+      const dbPrompt = await prisma.prompt.findFirst({
+        where: { name: templateType.name, status: "ACTIVE" },
+      });
+
+      const effectiveTemplate = dbPrompt
+        ? {
+            name: dbPrompt.name,
+            description: dbPrompt.description || templateType.description,
+            system: dbPrompt.systemPrompt,
+            user: dbPrompt.userPrompt,
+            designEngine: dbPrompt.designEngine,
+          }
+        : templateType;
+
+      const urlsForGeneration = Array.isArray(url) ? url : url ? [url] : [];
+      const emailTemplate = await generateEmailTemplate(
+        providedProductInfo,
+        urlsForGeneration.length > 0 ? urlsForGeneration : "",
+        effectiveTemplate
+      );
+
+      return NextResponse.json({ emailTemplate, productInfo: providedProductInfo });
+    }
 
     if (!hasCountryPayload && !url) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });

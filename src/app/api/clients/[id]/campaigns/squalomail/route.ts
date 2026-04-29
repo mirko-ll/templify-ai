@@ -162,6 +162,10 @@ export async function POST(
     imageOverrides,
     mailingListOverrides,
     mailingListNames,
+    productUrl,
+    productNickname,
+    productInfo,
+    templateId,
   } = body ?? {};
 
   if (!emailTemplate || typeof emailTemplate !== "object") {
@@ -201,6 +205,13 @@ export async function POST(
       imageOverrides: normalizedOverrides,
       mailingListOverrides: normalizedMailingListOverrides,
       mailingListNames: mailingListNames && typeof mailingListNames === "object" ? mailingListNames : undefined,
+      productUrl: typeof productUrl === "string" && productUrl.trim() ? productUrl.trim() : undefined,
+      productNickname:
+        typeof productNickname === "string" && productNickname.trim()
+          ? productNickname.trim()
+          : undefined,
+      productInfo: productInfo && typeof productInfo === "object" ? productInfo : undefined,
+      templateId: typeof templateId === "string" && templateId.trim() ? templateId.trim() : undefined,
     };
 
     const result = await callTemplaitoBackend({

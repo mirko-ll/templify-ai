@@ -35,8 +35,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const campaignId = typeof (payload as any)?.campaignId === "string" ? (payload as any).campaignId : "";
-  const sendDate = typeof (payload as any)?.sendDate === "string" ? (payload as any).sendDate : "";
+  const body = (payload ?? {}) as Record<string, any>;
+  const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
+  const sendDate = typeof body.sendDate === "string" ? body.sendDate : "";
+  const templateId = typeof body.templateId === "string" ? body.templateId : undefined;
+  const emailTemplate =
+    body.emailTemplate && typeof body.emailTemplate === "object" ? body.emailTemplate : undefined;
+  const subject = typeof body.subject === "string" ? body.subject : undefined;
+  const preheader = typeof body.preheader === "string" ? body.preheader : undefined;
 
   if (!campaignId) {
     return NextResponse.json({ error: "campaignId is required" }, { status: 400 });
@@ -64,7 +70,13 @@ export async function POST(request: NextRequest) {
     const result = await callTemplaitoBackend({
       path: `/integrations/squalomail/campaigns/${campaignId}/resend`,
       method: "POST",
-      body: JSON.stringify({ sendDate }),
+      body: JSON.stringify({
+        sendDate,
+        templateId,
+        emailTemplate,
+        subject,
+        preheader,
+      }),
     });
 
     return NextResponse.json(result);

@@ -12,7 +12,8 @@
       "Bash(wc:*)",
       "Bash(grep:*)",
       "Bash(npm install:*)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(npx next *)"
     ],
     "deny": [],
     "ask": [],

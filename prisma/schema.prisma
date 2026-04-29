@@ -277,6 +277,12 @@ model Campaign {
   preheader  String? @db.Text
   senderName String?
   utmMedium  String?
+
+  productUrl      String? @db.Text
+  productNickname String?
+  productInfoJson String? @db.LongText
+  countryResultsJson String? @db.LongText
+  templateId      String?
 }
 
 model CampaignCountry {

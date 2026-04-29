@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { SyntheticEvent } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   DocumentDuplicateIcon,
   CheckIcon,
@@ -153,6 +153,8 @@ function extractCountryFromUrl(url: string): string | null {
 export default function TemplaitoApp() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resendCampaignId = searchParams?.get("resendCampaignId") ?? null;
   const isAdmin = Boolean(((session as any)?.user as any)?.isAdmin);
 
   useEffect(() => {
@@ -248,7 +250,10 @@ export default function TemplaitoApp() {
   const [mailingListOverrides, setMailingListOverrides] = useState<Record<string, string[]>>({});
   const [overrideSectionExpanded, setOverrideSectionExpanded] = useState(false);
   const [integration, setIntegration] = useState<SqualoIntegration | null>(null);
+  const [resendHydrating, setResendHydrating] = useState(false);
+  const resendHydratedRef = useRef(false);
   const previewRef = useRef<HTMLIFrameElement>(null);
+  const isResendMode = Boolean(resendCampaignId);
 
   const mailingLists = useMemo(() => {
     const lists = integration?.metadata?.lists;
@@ -259,6 +264,156 @@ export default function TemplaitoApp() {
   useEffect(() => {
     fetchActivePrompts();
   }, []);
+
+  /**
+   * When `?resendCampaignId=X` is present, hydrate /app from the original campaign:
+   * pre-fill subject/preheader/sender, country URLs, productInfo, regenerate the
+   * email HTML with the original (or chosen) template, and jump to the results
+   * step so the user can adjust images / mailing lists before scheduling.
+   * Runs once when prompts + clientId are ready.
+   */
+  useEffect(() => {
+    if (!resendCampaignId) return;
+    if (resendHydratedRef.current) return; // hydrated once, don't redo
+    if (availablePrompts.length === 0) return;
+    if (!activeClientId) return;
+    // Wait for countryConfigs so we can correctly identify mailing-list overrides
+    // (otherwise every selected list looks like an override).
+    if (countryConfigs.length === 0) return;
+
+    let cancelled = false;
+    const hydrate = async () => {
+      setResendHydrating(true);
+      setError("");
+      try {
+        const res = await fetch(`/api/campaigns/${resendCampaignId}/replay-data`);
+        if (cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to load campaign for resend");
+        }
+        if (!data?.productInfo || !data?.countryResults) {
+          throw new Error(
+            "This campaign predates the resend feature. Use the simple resend instead."
+          );
+        }
+
+        const cr = data.countryResults as Record<
+          string,
+          { type: "SINGLE" | "MULTI"; urls: string[]; productInfo?: ProductInfo; multiProductInfo?: MultiProductInfo }
+        >;
+
+        const urlMap: Record<string, string[]> = {};
+        Object.entries(cr).forEach(([code, entry]) => {
+          urlMap[code] = Array.isArray(entry?.urls) ? entry.urls : [];
+        });
+
+        const isMulti = Object.values(cr).some(
+          (entry) => Array.isArray(entry?.urls) && entry.urls.length > 1
+        );
+
+        const primaryEntry =
+          Object.values(cr).find((entry) => entry.urls.length > 1) ??
+          Object.values(cr)[0];
+        const primaryProductInfo = isMulti
+          ? primaryEntry?.multiProductInfo
+          : primaryEntry?.productInfo;
+
+        // Pick the original template if it's still active; otherwise leave selection empty.
+        const filteredAvailable = availablePrompts.filter((p) =>
+          isMulti ? p.templateType === "MULTI_PRODUCT" : p.templateType === "SINGLE_PRODUCT"
+        );
+        const originalIndex = filteredAvailable.findIndex(
+          (p) => p.id === data.templateId
+        );
+        const chosenIndex = originalIndex >= 0 ? originalIndex : 0;
+        const chosenPrompt = filteredAvailable[chosenIndex];
+        if (!chosenPrompt) {
+          throw new Error(
+            "No matching template available for this campaign type."
+          );
+        }
+
+        // Reconstruct mailing-list overrides: only treat a country as overridden
+        // when its selected lists differ from that country's default mailing list.
+        // Multiple lists for one country always counts as an override.
+        const targets = Array.isArray(data.countryTargets)
+          ? (data.countryTargets as Array<{
+              countryCode: string;
+              mailingListId: string | null;
+              mailingListName: string | null;
+            }>)
+          : [];
+        const targetsByCountry = new Map<string, string[]>();
+        for (const t of targets) {
+          if (!t.mailingListId) continue;
+          const existing = targetsByCountry.get(t.countryCode) ?? [];
+          if (!existing.includes(t.mailingListId)) {
+            existing.push(t.mailingListId);
+          }
+          targetsByCountry.set(t.countryCode, existing);
+        }
+        const defaultListByCountry = new Map(
+          countryConfigs
+            .filter((c) => c.mailingListId)
+            .map((c) => [c.countryCode, c.mailingListId as string])
+        );
+        const reconstructedOverrides: Record<string, string[]> = {};
+        targetsByCountry.forEach((listIds, countryCode) => {
+          const defaultId = defaultListByCountry.get(countryCode) ?? null;
+          const isOverride =
+            listIds.length > 1 || (listIds.length === 1 && listIds[0] !== defaultId);
+          if (isOverride) {
+            reconstructedOverrides[countryCode] = listIds;
+          }
+        });
+
+        // Apply prefill before regeneration so the UI shows the right context if user navigates.
+        setSingleUrlMode(false);
+        setCountryUrls(urlMap);
+        setSelectedCountryTab(Object.keys(urlMap)[0] ?? null);
+        setBaseCountry(Object.keys(urlMap)[0] ?? null);
+        setCountryScrapeResults(cr as Record<string, CountryScrapeResult>);
+        setProductInfo(
+          (primaryProductInfo as ProductInfo | MultiProductInfo | undefined) ?? null
+        );
+        setSelectedTemplateType(chosenIndex);
+        setMailingListOverrides(reconstructedOverrides);
+        setOverrideSectionExpanded(Object.keys(reconstructedOverrides).length > 0);
+        setPublishForm({
+          sendDate: "",
+          subject: typeof data.subject === "string" ? data.subject : "",
+          preheader: typeof data.preheader === "string" ? data.preheader : "",
+          senderName: typeof data.senderName === "string" ? data.senderName : "",
+        });
+
+        // Land on template-selection so the user can pick a (possibly different)
+        // template. Generation runs only after they choose — no wasted regen.
+        setStep("template-selection");
+        resendHydratedRef.current = true;
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Resend hydration failed", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load campaign for resend. Try again."
+        );
+        setStep("input");
+      } finally {
+        // Always reset the loading flag so the UI doesn't get stuck if a
+        // StrictMode dev re-run cancels this effect after setting it true.
+        setResendHydrating(false);
+      }
+    };
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resendCampaignId, availablePrompts, activeClientId, countryConfigs]);
 
   useEffect(() => {
     if (!globalToast) {
@@ -549,6 +704,52 @@ export default function TemplaitoApp() {
     setSelectedTemplateType(templateIndex);
     setLoading(true);
     setError("");
+    setStep("processing");
+
+    // Resend mode: skip re-scraping. We already have countryScrapeResults +
+    // productInfo from the original campaign; just regenerate the email HTML
+    // with the chosen template.
+    if (isResendMode && Object.keys(countryScrapeResults).length > 0 && productInfo) {
+      try {
+        const chosenTemplate = availableTemplates[templateIndex];
+        if (!chosenTemplate) {
+          throw new Error("Template not found");
+        }
+        setTemplate(null);
+        setOriginalTemplate(null);
+
+        const response = await fetch("/api/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            regenerateOnly: true,
+            productInfo,
+            templateType: { name: chosenTemplate.name },
+            url: primaryCountryUrl ?? "",
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.emailTemplate?.html) {
+          throw new Error(data?.error || "Failed to regenerate email");
+        }
+        setOriginalTemplate(data.emailTemplate);
+        setTemplate(data.emailTemplate);
+        setStep("results");
+      } catch (err) {
+        console.error("Resend regeneration failed", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to regenerate email. Try again."
+        );
+        setStep("template-selection");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Normal (non-resend) flow: clear cached scrape results and start fresh.
     setTemplate(null);
     setOriginalTemplate(null);
     setProductInfo(null);
@@ -557,7 +758,6 @@ export default function TemplaitoApp() {
     setMultiProductImageSelections({}); // Reset multi-product selections
     setBaseCountry(null);
     setCountryScrapeResults({});
-    setStep("processing");
 
     // Handle single URL mode for non-admins
     if (singleUrlMode) {
@@ -827,8 +1027,6 @@ export default function TemplaitoApp() {
     if (!publishLoading) {
       setPublishModalOpen(false);
       setPublishError("");
-      setMailingListOverrides({});
-      setOverrideSectionExpanded(false);
     }
   };
 
@@ -875,6 +1073,94 @@ export default function TemplaitoApp() {
         }
       }
 
+      // Prefer Slovenia (SI) data first if it's among the targeted countries —
+      // its product name/URL is what the user wants to see surfaced. Fall back
+      // to the global productInfo / first-available URL otherwise.
+      const siResult = countryScrapeResults["SI"];
+      const preferredCountryResult = siResult ?? null;
+
+      let productUrl = "";
+      let productNickname = "";
+
+      if (preferredCountryResult) {
+        productUrl = preferredCountryResult.urls?.[0] ?? "";
+        if (preferredCountryResult.type === "MULTI") {
+          productNickname =
+            preferredCountryResult.multiProductInfo?.products?.[0]?.title ?? "";
+        } else {
+          productNickname = preferredCountryResult.productInfo?.title ?? "";
+        }
+      }
+
+      if (!productUrl) {
+        productUrl = singleUrlMode
+          ? singleUrl.trim()
+          : isMultiProduct
+          ? allValidUrls[0] ?? ""
+          : primaryCountryUrl ?? "";
+      }
+
+      if (!productNickname && productInfo) {
+        if ("products" in productInfo && productInfo.products.length > 0) {
+          productNickname = productInfo.products[0]?.title ?? "";
+        } else if ("title" in productInfo) {
+          productNickname = productInfo.title ?? "";
+        }
+      }
+
+      const selectedTemplateId =
+        selectedTemplateType !== null
+          ? availableTemplates[selectedTemplateType]?.id ?? null
+          : null;
+
+      // Resend mode: schedule a resend of the original campaign with the freshly
+      // regenerated email instead of creating a brand new campaign.
+      if (isResendMode && resendCampaignId) {
+        if (!sendDateISO) {
+          throw new Error("Send date is required when scheduling a resend.");
+        }
+        const resendBody: Record<string, unknown> = {
+          campaignId: resendCampaignId,
+          sendDate: sendDateISO,
+          emailTemplate: originalTemplate ?? template,
+          subject: publishForm.subject || undefined,
+          preheader: publishForm.preheader || undefined,
+        };
+        if (selectedTemplateId) {
+          resendBody.templateId = selectedTemplateId;
+        }
+        const resendResponse = await fetch("/api/campaigns/resend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(resendBody),
+        });
+        const resendPayload = await resendResponse.json().catch(() => null);
+        if (!resendResponse.ok) {
+          throw new Error(
+            (resendPayload && (resendPayload as any).error) ||
+              "Failed to schedule resend"
+          );
+        }
+        setPublishLoading(false);
+        const successMessage = "Resend scheduled. Track progress in Campaigns.";
+        setPublishModalOpen(false);
+        setPublishForm({ sendDate: "", subject: "", preheader: "", senderName: "" });
+        setPublishError("");
+        setMailingListOverrides({});
+        setOverrideSectionExpanded(false);
+        setGlobalToast(successMessage);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            "templaito_publish_toast",
+            successMessage
+          );
+        }
+        const params = new URLSearchParams();
+        if (activeClientId) params.set("clientId", activeClientId);
+        router.push(`/campaigns?${params.toString()}`);
+        return;
+      }
+
       const response = await fetch(
         `/api/clients/${activeClientId}/campaigns/squalomail`,
         {
@@ -897,6 +1183,10 @@ export default function TemplaitoApp() {
             mailingListNames: Object.fromEntries(
               mailingLists.map((l: { id: string; name: string }) => [l.id, l.name])
             ),
+            productUrl: productUrl || undefined,
+            productNickname: productNickname || undefined,
+            productInfo: productInfo ?? undefined,
+            templateId: selectedTemplateId ?? undefined,
           }),
         }
       );
@@ -1268,6 +1558,36 @@ export default function TemplaitoApp() {
           </header>
 
           <div className={step === "results" ? "max-w-[1600px] mx-auto px-4" : "max-w-7xl mx-auto px-6"}>
+            {isResendMode && (
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-3 shadow-sm backdrop-blur">
+                <div className="flex items-center gap-3 text-indigo-800">
+                  <ArrowPathIcon className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {resendHydrating
+                        ? "Loading original campaign..."
+                        : "Customizing resend"}
+                    </p>
+                    <p className="text-xs text-indigo-700/80">
+                      {resendHydrating
+                        ? "Pre-filling URLs, product info, and original settings."
+                        : "Pick a template (same or different), adjust images and copy, then schedule the resend."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    if (activeClientId) params.set("clientId", activeClientId);
+                    router.push(`/campaigns?${params.toString()}`);
+                  }}
+                  className="text-xs font-medium text-indigo-700 underline-offset-2 transition hover:text-indigo-900 hover:underline cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             {step === "input" && (
               <div className="max-w-4xl mx-auto">
                 {/* Input Form */}
@@ -2217,11 +2537,12 @@ export default function TemplaitoApp() {
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h3 className="text-2xl font-semibold text-gray-900">
-                    Schedule Squalomail Campaign
+                    {isResendMode ? "Schedule resend" : "Schedule Squalomail Campaign"}
                   </h3>
                   <p className="text-sm text-gray-500 mt-1">
-                    Pick a subject, preheader, and optional send date before we
-                    hand the template to Squalomail.
+                    {isResendMode
+                      ? "Pick a new send date — subject, preheader, and template are pre-filled from the original campaign."
+                      : "Pick a subject, preheader, and optional send date before we hand the template to Squalomail."}
                   </p>
                 </div>
                 <button
@@ -2335,7 +2656,7 @@ export default function TemplaitoApp() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Send date/time (optional)
+                    {isResendMode ? "Send date/time *" : "Send date/time (optional)"}
                   </label>
                   <input
                     type="datetime-local"
@@ -2343,10 +2664,13 @@ export default function TemplaitoApp() {
                     onChange={(e) =>
                       updatePublishForm("sendDate", e.target.value)
                     }
+                    required={isResendMode}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Leave empty to send immediately after publishing.
+                    {isResendMode
+                      ? "Resends must be scheduled — pick a future date and time."
+                      : "Leave empty to send immediately after publishing."}
                   </p>
                 </div>
 
@@ -2402,7 +2726,11 @@ export default function TemplaitoApp() {
                       className="flex-1 px-3 py-2.5 cursor-pointer rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                       disabled={publishLoading}
                     >
-                      {publishLoading ? "Preparing..." : "Publish"}
+                      {publishLoading
+                        ? "Preparing..."
+                        : isResendMode
+                        ? "Schedule resend"
+                        : "Publish"}
                     </button>
                   </div>
                 </div>

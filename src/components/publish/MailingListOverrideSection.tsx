@@ -33,6 +33,62 @@ function getCountryFlag(countryCode: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
+interface ListNamePattern {
+  prefix: string;
+  suffix: string;
+  ccUpperCase: boolean;
+  display: string; // e.g. "<CC> manj aktivni kupci"
+}
+
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Detect the country code as a standalone token anywhere in the list name (prefix,
+// suffix, or middle). Returns a pattern with the CC location captured so it can be
+// substituted with other country codes. Returns null if the CC isn't found as a
+// bounded token (e.g. "BGmanj" doesn't count — the CC must be word-bounded).
+function buildListNamePattern(
+  listName: string,
+  countryCode: string
+): ListNamePattern | null {
+  if (!listName || !countryCode) return null;
+  const trimmed = listName.trim();
+  const cc = countryCode.toUpperCase();
+  // The CC must be surrounded by non-letter characters (or string boundaries),
+  // so "BGmanj" doesn't match but "BG manj", "manj_BG", "frozen-BG-kupci" do.
+  const re = new RegExp(`(^|[^A-Za-z])(${escapeRegex(cc)})([^A-Za-z]|$)`, "i");
+  const match = trimmed.match(re);
+  if (!match || match.index === undefined) return null;
+  const ccText = match[2];
+  const start = match.index + match[1].length;
+  const end = start + ccText.length;
+  const prefix = trimmed.slice(0, start);
+  const suffix = trimmed.slice(end);
+  return {
+    prefix,
+    suffix,
+    ccUpperCase: ccText === ccText.toUpperCase(),
+    display: `${prefix}<CC>${suffix}`,
+  };
+}
+
+// Try to find a mailing list whose name matches the pattern with the CC swapped
+// out for `otherCountryCode`. Comparison is case-insensitive on the whole name.
+function findListMatchingPattern(
+  pattern: ListNamePattern,
+  otherCountryCode: string,
+  mailingLists: MailingList[]
+): MailingList | null {
+  const cc = pattern.ccUpperCase
+    ? otherCountryCode.toUpperCase()
+    : otherCountryCode.toLowerCase();
+  const candidate = `${pattern.prefix}${cc}${pattern.suffix}`.trim().toLowerCase();
+  return (
+    mailingLists.find((l) => l.name.trim().toLowerCase() === candidate) ?? null
+  );
+}
+
 function MultiSelect({
   options,
   selectedValues,
@@ -231,6 +287,41 @@ export default function MailingListOverrideSection({
               const selectedIds = overrides[config.countryCode] || [];
               const hasOverride = selectedIds.length > 0;
 
+              // Pattern-prefill: if exactly one list is overridden and its name contains
+              // this country's code as a bounded token, find matching lists for other
+              // countries that don't yet have an override.
+              const patternMatches: Array<{ countryCode: string; list: MailingList }> = [];
+              let detectedPattern: ListNamePattern | null = null;
+              if (selectedIds.length === 1) {
+                const selectedList = mailingLists.find((l) => l.id === selectedIds[0]);
+                if (selectedList) {
+                  detectedPattern = buildListNamePattern(
+                    selectedList.name,
+                    config.countryCode
+                  );
+                  if (detectedPattern) {
+                    for (const other of countryConfigs) {
+                      if (other.countryCode === config.countryCode) continue;
+                      if ((overrides[other.countryCode] ?? []).length > 0) continue;
+                      const match = findListMatchingPattern(
+                        detectedPattern,
+                        other.countryCode,
+                        mailingLists
+                      );
+                      if (match) {
+                        patternMatches.push({ countryCode: other.countryCode, list: match });
+                      }
+                    }
+                  }
+                }
+              }
+
+              const applyPatternToOthers = () => {
+                for (const { countryCode, list } of patternMatches) {
+                  onOverrideChange(countryCode, [list.id]);
+                }
+              };
+
               return (
                 <div
                   key={config.countryCode}
@@ -268,6 +359,26 @@ export default function MailingListOverrideSection({
                       />
                     </div>
                   </div>
+
+                  {patternMatches.length > 0 && detectedPattern && (
+                    <div className="mt-2 ml-9 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-800">
+                      <span className="flex-1">
+                        Found <strong>{patternMatches.length}</strong> matching list
+                        {patternMatches.length !== 1 ? "s" : ""} for pattern{" "}
+                        <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono text-[11px]">
+                          {detectedPattern.display}
+                        </code>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={applyPatternToOthers}
+                        className="rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700 cursor-pointer"
+                      >
+                        Apply to {patternMatches.length} other
+                        {patternMatches.length !== 1 ? "s" : ""}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

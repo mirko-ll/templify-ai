@@ -18,6 +18,7 @@ import {
   ClockIcon,
   XCircleIcon,
   ChartBarIcon,
+  TagIcon,
 } from "@heroicons/react/24/outline";
 import {
   PageLoadingSpinner,
@@ -51,6 +52,9 @@ interface CampaignSummary {
   subject?: string | null;
   preheader?: string | null;
   senderName?: string | null;
+  productUrl?: string | null;
+  productNickname?: string | null;
+  templateId?: string | null;
   canResend?: boolean;
 }
 
@@ -451,6 +455,7 @@ function CampaignsPageContent() {
     return () => window.clearTimeout(timer);
   }, [publishToast]);
 
+
   useEffect(() => {
     const queryClientId = searchParams.get("clientId");
     const queryStatus = searchParams.get("status")?.toUpperCase() ?? null;
@@ -561,6 +566,10 @@ function CampaignsPageContent() {
     loadCampaigns(activeClientId, page).finally(() => setRefreshing(false));
   };
 
+  /**
+   * Quick-resend path: re-send the existing campaign as-is at a new date.
+   * For changing template / images / subject, the user goes to /app?resendCampaignId=X.
+   */
   const handleResend = async () => {
     if (!resendTarget || !resendDate || resendLoading) return;
 
@@ -593,6 +602,14 @@ function CampaignsPageContent() {
     } finally {
       setResendLoading(false);
     }
+  };
+
+  const goToCustomizeResend = () => {
+    if (!resendTarget) return;
+    const params = new URLSearchParams();
+    if (activeClientId) params.set("clientId", activeClientId);
+    params.set("resendCampaignId", resendTarget.id);
+    router.push(`/app?${params.toString()}`);
   };
 
   const goToPage = (nextPage: number) => {
@@ -661,6 +678,24 @@ function CampaignsPageContent() {
               onChange={(e) => setResendDate(e.target.value)}
               className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
+
+            <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <p className="text-xs font-medium text-indigo-900">
+                Want a different template, images, or copy?
+              </p>
+              <p className="mt-0.5 text-[11px] text-indigo-700/80">
+                Open the full editor with everything pre-filled from this campaign.
+              </p>
+              <button
+                type="button"
+                onClick={goToCustomizeResend}
+                disabled={resendLoading}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                <SparklesIcon className="h-3.5 w-3.5" />
+                Customize &amp; resend
+              </button>
+            </div>
 
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
@@ -850,6 +885,25 @@ function CampaignsPageContent() {
                                   {campaign.preheader}
                                 </p>
                               )}
+                              {campaign.productNickname &&
+                                (campaign.productUrl ? (
+                                  <a
+                                    href={campaign.productUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={campaign.productUrl}
+                                    className="mt-1 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-100"
+                                  >
+                                    <TagIcon className="h-3 w-3 flex-shrink-0" />
+                                    <span>{campaign.productNickname}</span>
+                                  </a>
+                                ) : (
+                                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+                                    <TagIcon className="h-3 w-3 flex-shrink-0" />
+                                    <span>{campaign.productNickname}</span>
+                                  </span>
+                                ))}
                             </div>
                           </div>
 
