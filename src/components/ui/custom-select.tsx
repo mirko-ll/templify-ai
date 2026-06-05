@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { ChevronDownIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { useEffect, useRef, useState } from "react";
+import { ChevronDownIcon, CheckIcon } from "@heroicons/react/24/outline";
+import { cn } from "@/lib/cn";
 
 interface Option {
   value: string;
@@ -15,6 +16,7 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Legacy theming props — accepted for compatibility, no longer used. */
   gradientFrom?: string;
   gradientTo?: string;
   borderColor?: string;
@@ -32,39 +34,33 @@ export default function CustomSelect({
   onChange,
   placeholder = "Select an option",
   className = "",
-  gradientFrom = "blue-50",
-  gradientTo = "indigo-50",
-  borderColor = "blue-200",
-  textColor = "blue-800",
-  hoverFrom = "blue-100",
-  hoverTo = "indigo-100",
   disabled = false,
   dropdownPlacement = "below",
-  size = "md"
+  size = "md",
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const selectedOption = options.find(option => option.value === value);
-
-  const dropdownPositionClass = dropdownPlacement === "above"
-    ? "bottom-full mb-2"
-    : "top-full mt-2";
-
-  const dropdownAnimationClass = dropdownPlacement === "above"
-    ? "animate-in slide-in-from-bottom-2"
-    : "animate-in slide-in-from-top-2";
+  const selectedOption = options.find((option) => option.value === value);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   const handleSelect = (optionValue: string) => {
@@ -72,103 +68,78 @@ export default function CustomSelect({
     setIsOpen(false);
   };
 
-  const sizeClasses = size === "sm"
-    ? "px-3 py-1 pr-8 text-xs"
-    : "px-4 py-2 pr-10 text-sm";
+  const triggerSize =
+    size === "sm" ? "h-8 px-3 pr-9 text-xs" : "h-10 px-3.5 pr-10 text-sm";
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={cn("relative", className)} ref={dropdownRef}>
       <button
-        ref={buttonRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`
-          w-full appearance-none bg-gradient-to-r from-${gradientFrom} to-${gradientTo}
-          border border-${borderColor} text-${textColor} ${sizeClasses} rounded-full
-          focus:ring-2 focus:ring-${borderColor.split('-')[0]}-500 focus:border-transparent
-          font-medium cursor-pointer hover:from-${hoverFrom} hover:to-${hoverTo}
-          transition-all duration-200 flex items-center justify-between
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-          ${isOpen ? `ring-2 ring-${borderColor.split('-')[0]}-500` : ''}
-        `}
+        onClick={() => !disabled && setIsOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-lg border bg-surface font-medium text-ink shadow-soft transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30",
+          triggerSize,
+          isOpen ? "border-brand-400 ring-2 ring-brand-500/30" : "border-line-strong",
+          disabled
+            ? "cursor-not-allowed opacity-50"
+            : "cursor-pointer hover:border-line-strong"
+        )}
       >
-        <span className="flex items-center space-x-2">
+        <span className="flex items-center gap-2 truncate">
           {selectedOption?.emoji && <span>{selectedOption.emoji}</span>}
-          <span>{selectedOption?.label || placeholder}</span>
+          <span className={cn("truncate", !selectedOption && "text-muted")}>
+            {selectedOption?.label || placeholder}
+          </span>
         </span>
-        <ChevronDownIcon 
-          className={`w-4 h-4 text-${textColor} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        <ChevronDownIcon
+          className={cn(
+            "h-4 w-4 flex-shrink-0 text-muted transition-transform duration-200",
+            isOpen && "rotate-180"
+          )}
         />
       </button>
 
-      {/* Dropdown Menu */}
       {isOpen && (
-        <div className={`absolute left-0 right-0 z-50 min-w-max ${dropdownPositionClass}`}>
-
-          <div className={`bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-200 ${dropdownAnimationClass} min-w-full`}>
-
-            <div className="max-h-64 overflow-y-auto custom-scrollbar">
-              {options.map((option, index) => (
+        <div
+          role="listbox"
+          className={cn(
+            "absolute left-0 right-0 z-50 min-w-max",
+            dropdownPlacement === "above" ? "bottom-full mb-2" : "top-full mt-2"
+          )}
+        >
+          <div className="animate-rise max-h-64 min-w-full overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-overlay">
+            {options.map((option) => {
+              const isSelected = value === option.value;
+              return (
                 <button
                   key={option.value}
                   type="button"
+                  role="option"
+                  aria-selected={isSelected}
                   onClick={() => handleSelect(option.value)}
-                  className={`
-                    w-full px-4 py-2.5 text-left transition-all duration-150 
-                    flex items-center justify-between group relative min-w-max
-                    hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50
-                    ${value === option.value 
-                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 font-medium shadow-inner' 
-                      : 'text-gray-700 hover:text-gray-900'
-                    }
-                    ${index === 0 ? 'rounded-t-2xl' : ''}
-                    ${index === options.length - 1 ? 'rounded-b-2xl' : ''}
-                    focus:outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:ring-inset
-                  `}
-                  style={{
-                    animationDelay: `${index * 40}ms`,
-                    animationFillMode: 'backwards'
-                  }}
-                >
-                  <span className="flex items-center space-x-2.5 whitespace-nowrap">
-                    {option.emoji && (
-                      <span className="text-lg group-hover:scale-110 transition-transform duration-200">
-                        {option.emoji}
-                      </span>
-                    )}
-                    <span className="font-medium text-sm">{option.label}</span>
-                  </span>
-                  {value === option.value && (
-                    <CheckIcon className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform duration-200 ml-3" />
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none",
+                    isSelected
+                      ? "bg-brand-50 font-medium text-brand-700"
+                      : "text-body hover:bg-surface-muted hover:text-ink"
                   )}
-                  {/* Subtle selection indicator */}
-                  {value === option.value && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-r-full"></div>
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {option.emoji && <span>{option.emoji}</span>}
+                    <span className="truncate">{option.label}</span>
+                  </span>
+                  {isSelected && (
+                    <CheckIcon className="h-4 w-4 flex-shrink-0 text-brand-600" />
                   )}
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
-      
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-      `}</style>
     </div>
   );
 }

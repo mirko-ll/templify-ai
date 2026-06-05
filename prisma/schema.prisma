@@ -217,6 +217,10 @@ model Client {
   integrations   ClientIntegration[]
   countryConfigs ClientCountryConfig[]
   campaigns      Campaign[]
+  productSources ProductSource[]
+  products       Product[]
+  productSyncRuns ProductSyncRun[]
+  campaignPlans  CampaignPlan[]
 
   @@index([userId])
   @@index([isArchived])
@@ -311,6 +315,189 @@ model CampaignCountry {
   @@index([countryCode])
 }
 
+model ProductSource {
+  id           String   @id @default(cuid())
+  clientId     String
+  name         String?
+  url          String   @db.Text
+  countryCode  String?
+  crawlDepth   Int      @default(1)
+  isEnabled    Boolean  @default(true)
+  config       Json?
+  lastSyncedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client   Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  syncRuns ProductSyncRun[]
+  listings ProductListing[]
+
+  @@index([clientId])
+  @@index([countryCode])
+  @@index([isEnabled])
+}
+
+model Product {
+  id              String        @id @default(cuid())
+  clientId        String
+  externalKey     String?
+  title           String
+  normalizedTitle String
+  description     String?       @db.Text
+  canonicalUrl    String?       @db.Text
+  bestImageUrl    String?       @db.Text
+  status          ProductStatus @default(ACTIVE)
+  metadata        Json?
+  firstSeenAt     DateTime      @default(now())
+  lastSeenAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  listings  ProductListing[]
+  images    ProductImage[]
+  planItems CampaignPlanItem[]
+
+  @@unique([clientId, externalKey])
+  @@index([clientId])
+  @@index([status])
+  @@index([normalizedTitle])
+}
+
+model ProductListing {
+  id           String              @id @default(cuid())
+  clientId     String
+  productId    String
+  sourceId     String?
+  countryCode  String?
+  url          String              @db.Text
+  urlHash      String
+  slug         String?
+  title        String?
+  priceRaw     String?
+  regularPrice String?
+  salePrice    String?
+  currency     String?
+  availability ProductAvailability @default(UNKNOWN)
+  metadata     Json?
+  scrapedAt    DateTime            @default(now())
+  lastSeenAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  source  ProductSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, urlHash])
+  @@index([clientId])
+  @@index([productId])
+  @@index([sourceId])
+  @@index([countryCode])
+}
+
+model ProductImage {
+  id         String   @id @default(cuid())
+  productId  String
+  url        String   @db.Text
+  urlHash    String
+  rank       Int      @default(0)
+  isSelected Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, urlHash])
+  @@index([productId])
+}
+
+model ProductSyncRun {
+  id              String            @id @default(cuid())
+  clientId        String
+  sourceId        String?
+  status          ProductSyncStatus @default(RUNNING)
+  startedAt       DateTime          @default(now())
+  finishedAt      DateTime?
+  discoveredCount Int               @default(0)
+  createdCount    Int               @default(0)
+  updatedCount    Int               @default(0)
+  missingCount    Int               @default(0)
+  failedCount     Int               @default(0)
+  errorMessage    String?           @db.Text
+  log             Json?
+
+  client Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  source ProductSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  events ProductSyncEvent[]
+
+  @@index([clientId])
+  @@index([sourceId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model ProductSyncEvent {
+  id        String               @id @default(cuid())
+  runId     String
+  type      ProductSyncEventType
+  productId String?
+  listingId String?
+  url       String?              @db.Text
+  message   String?              @db.Text
+  createdAt DateTime             @default(now())
+
+  run ProductSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([type])
+}
+
+model CampaignPlan {
+  id          String             @id @default(cuid())
+  clientId    String
+  name        String
+  month       Int
+  year        Int
+  mode        CampaignPlanMode   @default(MANUAL)
+  status      CampaignPlanStatus @default(DRAFT)
+  strategy    Json?
+  approvedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  client Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items  CampaignPlanItem[]
+
+  @@index([clientId])
+  @@index([year, month])
+  @@index([status])
+}
+
+model CampaignPlanItem {
+  id               String               @id @default(cuid())
+  planId           String
+  productId        String?
+  campaignId       String?
+  type             CampaignPlanItemType @default(TEST)
+  position         Int                  @default(0)
+  sendDate         DateTime?
+  countryCodes     Json?
+  templateId       String?
+  selectedImageUrl String?              @db.Text
+  priceOverride    String?
+  notes            String?              @db.Text
+  productSnapshot  Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  plan    CampaignPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  product Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+  @@index([productId])
+  @@index([campaignId])
+}
+
 enum DesignEngine {
   CLAUDE
   GPT4O
@@ -348,4 +535,49 @@ enum CampaignStatus {
 enum TemplateType {
   SINGLE_PRODUCT
   MULTI_PRODUCT
+}
+
+enum ProductStatus {
+  ACTIVE
+  POSSIBLY_UNAVAILABLE
+  ARCHIVED
+}
+
+enum ProductAvailability {
+  IN_STOCK
+  OUT_OF_STOCK
+  UNKNOWN
+}
+
+enum ProductSyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum ProductSyncEventType {
+  CREATED
+  UPDATED
+  MISSING
+  FAILED
+}
+
+enum CampaignPlanMode {
+  MANUAL
+  ASSISTED
+}
+
+enum CampaignPlanStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignPlanItemType {
+  WINNER
+  TEST
+  MANUAL
 }

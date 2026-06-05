@@ -1,6 +1,8 @@
+import { cn } from "@/lib/cn";
+
 interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg" | "xl";
-  color?: "indigo" | "blue" | "green" | "red" | "white" | "gray";
+  color?: "brand" | "white" | "muted" | "current";
   className?: string;
   text?: string;
 }
@@ -9,33 +11,38 @@ const sizeClasses = {
   sm: "h-4 w-4 border-2",
   md: "h-6 w-6 border-2",
   lg: "h-8 w-8 border-2",
-  xl: "h-12 w-12 border-b-2",
+  xl: "h-11 w-11 border-[3px]",
 };
 
 const colorClasses = {
-  indigo: "border-indigo-600 border-t-transparent",
-  blue: "border-blue-600 border-t-transparent",
-  green: "border-green-600 border-t-transparent",
-  red: "border-red-600 border-t-transparent",
+  brand: "border-brand-600 border-t-transparent",
   white: "border-white border-t-transparent",
-  gray: "border-gray-600 border-t-transparent",
+  muted: "border-muted border-t-transparent",
+  current: "border-current border-t-transparent",
 };
 
 export function LoadingSpinner({
   size = "md",
-  color = "indigo",
+  color = "brand",
   className = "",
   text,
 }: LoadingSpinnerProps) {
-  const spinnerClasses = `animate-spin rounded-full ${sizeClasses[size]} ${colorClasses[color]} ${className}`;
-
-  const spinner = <div className={spinnerClasses} />;
+  const spinner = (
+    <div
+      className={cn(
+        "animate-spin rounded-full",
+        sizeClasses[size],
+        colorClasses[color],
+        className
+      )}
+    />
+  );
 
   if (text) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {spinner}
-        <span className="text-sm text-gray-600">{text}</span>
+        <span className="text-sm text-muted">{text}</span>
       </div>
     );
   }
@@ -46,10 +53,10 @@ export function LoadingSpinner({
 // Preset components for common use cases
 export function PageLoadingSpinner({ text }: { text?: string }) {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <div className="text-center flex flex-col items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center bg-canvas">
+      <div className="flex flex-col items-center justify-center text-center">
         <LoadingSpinner size="xl" />
-        {text && <p className="mt-4 text-slate-600">{text}</p>}
+        {text && <p className="mt-4 text-muted">{text}</p>}
       </div>
     </div>
   );
@@ -60,5 +67,5 @@ export function InlineLoadingSpinner({ text }: { text?: string }) {
 }
 
 export function ButtonLoadingSpinner() {
-  return <LoadingSpinner size="sm" color="white" />;
+  return <LoadingSpinner size="sm" color="current" />;
 }

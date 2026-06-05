@@ -42,12 +42,19 @@ export const authOptions: NextAuthOptions = {
     jwt: async ({ user, token }) => {
       if (user) {
         (token as any).uid = user.id
-        // Fetch user's admin status from database
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { isAdmin: true }
-        })
-        ;(token as any).isAdmin = dbUser?.isAdmin || false
+        // Fetch user's admin status from database. Guard against DB hiccups so a
+        // transient failure degrades to non-admin instead of crashing the auth
+        // route (which would surface as a CLIENT_FETCH_ERROR on the client).
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { isAdmin: true }
+          })
+          ;(token as any).isAdmin = dbUser?.isAdmin || false
+        } catch (error) {
+          console.error("[auth] Failed to load user admin status:", error)
+          ;(token as any).isAdmin = (token as any).isAdmin ?? false
+        }
       }
       return token
     },

@@ -28,6 +28,7 @@ import {
 import ExternalImage from "@/components/ui/external-image";
 import MailingListOverrideSection from "@/components/publish/MailingListOverrideSection";
 import { templateUIConfig } from "@/lib/template-config";
+import { buildCampaignUrl, type CampaignUrlRule } from "@/lib/product-links";
 import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 import type {
   Template,
@@ -94,6 +95,25 @@ interface SqualoIntegration {
   metadata?: {
     lists?: SqualoMailingList[];
   } | null;
+}
+
+interface CatalogProductListing {
+  id: string;
+  countryCode: string | null;
+  url: string;
+  slug: string | null;
+  priceRaw: string | null;
+  campaignUrl: string;
+  campaignUrlRule?: CampaignUrlRule | null;
+}
+
+interface CatalogProduct {
+  id: string;
+  title: string;
+  normalizedTitle: string;
+  bestImageUrl: string | null;
+  status: string;
+  listings: CatalogProductListing[];
 }
 
 function buildCountryUrlState(
@@ -169,6 +189,11 @@ function TemplaitoApp() {
     ClientCountryConfigSummary[]
   >([]);
   const [countryUrls, setCountryUrls] = useState<Record<string, string[]>>({});
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
+  const [catalogPrice, setCatalogPrice] = useState("");
+  const [catalogError, setCatalogError] = useState("");
   const [selectedCountryTab, setSelectedCountryTab] = useState<string | null>(
     null
   );
@@ -260,6 +285,13 @@ function TemplaitoApp() {
     const lists = integration?.metadata?.lists;
     return Array.isArray(lists) ? lists : [];
   }, [integration]);
+
+  const selectedCatalogProduct = useMemo(
+    () =>
+      catalogProducts.find((product) => product.id === selectedCatalogProductId) ??
+      null,
+    [catalogProducts, selectedCatalogProductId]
+  );
 
   // Fetch available prompts on component mount
   useEffect(() => {
@@ -465,6 +497,30 @@ function TemplaitoApp() {
       // Prompts loading complete
     }
   };
+
+  const loadProductCatalog = async (clientId: string) => {
+    setCatalogLoading(true);
+    setCatalogError("");
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/products?status=ACTIVE&limit=100`
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to load synced products");
+      }
+      setCatalogProducts(Array.isArray(data.products) ? data.products : []);
+    } catch (err) {
+      console.error("Failed to load product catalog", err);
+      setCatalogProducts([]);
+      setCatalogError(
+        err instanceof Error ? err.message : "Unable to load synced products"
+      );
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
   const loadClientContext = async () => {
     setContextLoading(true);
     try {
@@ -486,6 +542,8 @@ function TemplaitoApp() {
       if (!clientId) {
         setCountryConfigs([]);
         setCountryUrls({});
+        setCatalogProducts([]);
+        setSelectedCatalogProductId("");
         // Enable single URL mode when no active client (for everyone)
         setSingleUrlMode(true);
         setError("");
@@ -530,6 +588,7 @@ function TemplaitoApp() {
       setCountryUrls((previous) => buildCountryUrlState(eligible, previous));
       setSingleUrlMode(false); // Disable single URL mode when client is active
       setError("");
+      loadProductCatalog(clientId);
 
       // Fetch integration to get available mailing lists for overrides
       try {
@@ -700,6 +759,60 @@ function TemplaitoApp() {
     },
     [countryConfigs]
   );
+
+  const applyCatalogProduct = () => {
+    if (!selectedCatalogProduct) {
+      setCatalogError("Choose a synced product first.");
+      return;
+    }
+
+    const activeCodes = new Set(countryConfigs.map((config) => config.countryCode));
+    const next: Record<string, string[]> = {};
+    let matched = 0;
+
+    countryConfigs.forEach((config) => {
+      const exactListings = selectedCatalogProduct.listings.filter(
+        (listing) => listing.countryCode === config.countryCode
+      );
+      const fallbackListings =
+        exactListings.length > 0
+          ? exactListings
+          : selectedCatalogProduct.listings.filter(
+              (listing) => !listing.countryCode && activeCodes.size <= 1
+            );
+
+      if (fallbackListings.length > 0) {
+        next[config.countryCode] = fallbackListings.map((listing) =>
+          buildCampaignUrl({
+            product: selectedCatalogProduct,
+            listing,
+            rule: listing.campaignUrlRule,
+            price: catalogPrice || listing.priceRaw,
+          })
+        );
+        matched++;
+      } else {
+        next[config.countryCode] = countryUrls[config.countryCode] ?? [""];
+      }
+    });
+
+    if (matched === 0) {
+      setCatalogError("This product has no listing for the active countries.");
+      return;
+    }
+
+    setCountryUrls(next);
+    const firstCountry = Object.keys(next).find((code) =>
+      next[code]?.some((url) => url.trim())
+    );
+    if (firstCountry) {
+      setSelectedCountryTab(firstCountry);
+    }
+    setCatalogError("");
+    setPasteToast(
+      `Filled ${matched} countr${matched > 1 ? "ies" : "y"} from ${selectedCatalogProduct.title}`
+    );
+  };
 
   const handleTemplateSelection = async (templateIndex: number) => {
     setSelectedTemplateType(templateIndex);
@@ -1647,6 +1760,72 @@ function TemplaitoApp() {
                         </div>
                       ) : (
                         <>
+                          {catalogProducts.length > 0 || catalogLoading || catalogError ? (
+                            <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                                <div className="flex-1">
+                                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                                    Synced product
+                                  </label>
+                                  <select
+                                    value={selectedCatalogProductId}
+                                    onChange={(event) => {
+                                      const productId = event.target.value;
+                                      const product = catalogProducts.find(
+                                        (item) => item.id === productId
+                                      );
+                                      setSelectedCatalogProductId(productId);
+                                      setCatalogPrice(
+                                        product?.listings.find(
+                                          (listing) => listing.priceRaw
+                                        )?.priceRaw ?? ""
+                                      );
+                                    }}
+                                    className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                  >
+                                    <option value="">
+                                      {catalogLoading
+                                        ? "Loading products..."
+                                        : "Choose product from catalog"}
+                                    </option>
+                                    {catalogProducts.map((product) => (
+                                      <option key={product.id} value={product.id}>
+                                        {product.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="lg:w-36">
+                                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                                    Price
+                                  </label>
+                                  <input
+                                    value={catalogPrice}
+                                    onChange={(event) =>
+                                      setCatalogPrice(event.target.value)
+                                    }
+                                    placeholder="19"
+                                    className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={applyCatalogProduct}
+                                  disabled={!selectedCatalogProductId}
+                                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <LinkIcon className="h-4 w-4" />
+                                  Fill URLs
+                                </button>
+                              </div>
+                              {catalogError && (
+                                <p className="mt-2 text-xs font-medium text-red-600">
+                                  {catalogError}
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
+
                           {/* Smart Paste Area */}
                           <div className="mb-4">
                             <div

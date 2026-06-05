@@ -5,9 +5,21 @@ import Link from "next/link";
 import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
+  CheckCircleIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
+  UsersIcon,
 } from "@heroicons/react/24/outline";
-import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Field, Input, Textarea } from "@/components/ui/field";
+import { Modal } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonCard } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
+import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/cn";
 
 interface ClientSummary {
   id: string;
@@ -48,6 +60,7 @@ const initialFormState: FormState = {
 };
 
 export default function ClientsPage() {
+  const toast = useToast();
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
@@ -124,10 +137,13 @@ export default function ClientsPage() {
       }
 
       setActiveClientId(clientId);
+      const name = clients.find((c) => c.id === clientId)?.name;
+      toast.success("Active client set", name ? `${name} is now active.` : undefined);
     } catch (err) {
       console.error(err);
-      setError(
-        err instanceof Error ? err.message : "Failed to set active client"
+      toast.error(
+        "Couldn't set active client",
+        err instanceof Error ? err.message : undefined
       );
     } finally {
       setActivatingId(null);
@@ -148,10 +164,12 @@ export default function ClientsPage() {
       }
 
       setActiveClientId(null);
+      toast.success("Active client cleared");
     } catch (err) {
       console.error(err);
-      setError(
-        err instanceof Error ? err.message : "Failed to clear active client"
+      toast.error(
+        "Couldn't clear active client",
+        err instanceof Error ? err.message : undefined
       );
     } finally {
       setActivatingId(null);
@@ -202,9 +220,11 @@ export default function ClientsPage() {
         throw new Error(payload?.error || "Failed to create client");
       }
 
+      const createdName = formData.name.trim();
       resetForm();
       await loadClients(search);
       await loadActiveClient();
+      toast.success("Client created", `${createdName} was added to your workspace.`);
     } catch (err) {
       console.error(err);
       setFormError(
@@ -220,92 +240,109 @@ export default function ClientsPage() {
     [clients]
   );
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">Clients</h1>
-            <p className="text-gray-600 mt-2 max-w-2xl">
-              Manage your clients, track integration status, and configure the
-              countries you plan to target for campaign generation.
-            </p>
-          </div>
-          <button
-            onClick={() => setIsCreating(true)}
-            className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 px-5 text-white font-semibold shadow-lg hover:shadow-xl"
-          >
-            <PlusIcon className="w-5 h-5" />
-            New Client
-          </button>
-        </div>
+  const activeClientName = clients.find((c) => c.id === activeClientId)?.name;
 
-        <div className="flex flex-col gap-4">
+  return (
+    <div className="app-canvas min-h-screen">
+      <div className="relative z-10 mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
+        <PageHeader
+          eyebrow="Workspace"
+          title="Clients"
+          description="Manage your clients, track integration status, and configure the countries you target for campaign generation."
+          actions={
+            <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setIsCreating(true)}>
+              New client
+            </Button>
+          }
+        />
+
+        <div className="space-y-4">
           <form
             onSubmit={handleSearch}
-            className="flex flex-col sm:flex-row gap-3 items-start sm:items-center"
+            className="flex flex-col gap-3 sm:flex-row sm:items-center"
           >
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search clients by name"
-              className="w-full sm:max-w-md rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-            <button
+            <div className="relative w-full sm:max-w-md">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search clients by name"
+                className="pl-10"
+                aria-label="Search clients by name"
+              />
+            </div>
+            <Button
               type="submit"
-              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              variant="secondary"
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
             >
-              <ArrowPathIcon className="w-4 h-4" />
               Refresh
-            </button>
+            </Button>
           </form>
 
           {activeClientId && (
-            <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
-              <span className="text-sm font-medium text-indigo-900">
-                Active Client: {clients.find((c) => c.id === activeClientId)?.name || "Unknown"}
-              </span>
-              <button
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white shadow-glow">
+                  <CheckCircleIcon className="h-4 w-4" />
+                </span>
+                <span className="text-sm text-body">
+                  Active client:{" "}
+                  <span className="font-semibold text-ink">
+                    {activeClientName || "Unknown"}
+                  </span>
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleClearActiveClient}
-                disabled={activatingId === "clearing"}
-                className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-white border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                isLoading={activatingId === "clearing"}
               >
-                {activatingId === "clearing" ? "Clearing..." : "Clear Active Client"}
-              </button>
+                Clear
+              </Button>
             </div>
           )}
         </div>
 
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-            {error}
-          </div>
-        )}
-
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <InlineLoadingSpinner text="Loading clients..." />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <SkeletonCard key={index} />
+            ))}
           </div>
+        ) : error ? (
+          <EmptyState
+            icon={<ArrowPathIcon className="h-6 w-6" />}
+            title="Couldn't load clients"
+            description={error}
+            action={
+              <Button
+                variant="secondary"
+                onClick={() => loadClients(search)}
+                leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+              >
+                Try again
+              </Button>
+            }
+          />
         ) : activeClients.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white py-16 text-center">
-            <h2 className="text-xl font-semibold text-gray-800">
-              No clients yet
-            </h2>
-            <p className="text-gray-500 mt-2">
-              Add your first client to start configuring integrations and
-              country preferences.
-            </p>
-            <button
-              onClick={() => setIsCreating(true)}
-              className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-white font-semibold shadow-lg hover:shadow-xl"
-            >
-              <PlusIcon className="w-5 h-5" />
-              Create client
-            </button>
-          </div>
+          <EmptyState
+            icon={<UsersIcon className="h-6 w-6" />}
+            title="No clients yet"
+            description="Add your first client to start configuring integrations and country preferences."
+            action={
+              <Button
+                leftIcon={<PlusIcon className="h-5 w-5" />}
+                onClick={() => setIsCreating(true)}
+              >
+                Create client
+              </Button>
+            }
+          />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {activeClients.map((client) => {
               const integration = client.integrations[0];
               const activeCountryCount = client.countryConfigs.filter(
@@ -314,197 +351,190 @@ export default function ClientsPage() {
               const isActive = client.id === activeClientId;
 
               return (
-                <div
+                <Card
                   key={client.id}
-                  className={`relative rounded-2xl border bg-white p-6 shadow-sm hover:shadow-md transition ${
-                    isActive
-                      ? "border-indigo-400 ring-1 ring-indigo-100 shadow-md"
-                      : "border-gray-200"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">
-                        {client.name}
-                      </h3>
-                      {client.industry && (
-                        <p className="text-sm text-indigo-600 font-medium">
-                          {client.industry}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      {isActive ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                          Active client
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleSetActiveClient(client.id)}
-                          disabled={activatingId === client.id}
-                          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {activatingId === client.id
-                            ? "Setting..."
-                            : "Set active"}
-                        </button>
-                      )}
-                      <Link
-                        href={`/clients/${client.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        View
-                        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </div>
-
-                  {client.description && (
-                    <p className="mt-3 text-sm text-gray-600 line-clamp-3">
-                      {client.description}
-                    </p>
+                  interactive
+                  className={cn(
+                    "relative overflow-hidden",
+                    isActive && "border-brand-300 ring-1 ring-brand-200"
                   )}
-
-                  <div className="mt-5 space-y-2 text-sm text-gray-600">
-                    <div className="flex items-center justify-between">
-                      <span>Countries configured</span>
-                      <span className="font-semibold text-gray-900">
-                        {activeCountryCount} / {client.countryConfigs.length}
-                      </span>
+                >
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 top-6 h-9 w-1 rounded-r-full bg-brand-600"
+                    />
+                  )}
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-lg font-semibold tracking-tight text-ink">
+                          {client.name}
+                        </h3>
+                        {client.industry && (
+                          <p className="mt-0.5 text-sm font-medium text-brand-600">
+                            {client.industry}
+                          </p>
+                        )}
+                      </div>
+                      {isActive && (
+                        <Badge variant="brand" dot>
+                          Active
+                        </Badge>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>Integration status</span>
-                      <span className="font-semibold text-gray-900">
-                        {integration ? integration.status : "Not connected"}
-                      </span>
+
+                    {client.description && (
+                      <p className="mt-3 line-clamp-2 text-sm text-muted">
+                        {client.description}
+                      </p>
+                    )}
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border border-line bg-surface-muted/60 px-3 py-2.5">
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+                          Countries
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-ink">
+                          {activeCountryCount}
+                          <span className="font-normal text-muted">
+                            {" "}
+                            / {client.countryConfigs.length}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-line bg-surface-muted/60 px-3 py-2.5">
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+                          Integration
+                        </p>
+                        <div className="mt-1">
+                          {integration ? (
+                            <StatusBadge status={integration.status} />
+                          ) : (
+                            <Badge variant="neutral">Not connected</Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+
+                  <div className="flex items-center justify-between border-t border-line px-5 py-3 sm:px-6">
+                    <Link
+                      href={`/clients/${client.id}`}
+                      className={buttonVariants({
+                        variant: "secondary",
+                        size: "sm",
+                      })}
+                    >
+                      View
+                      <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                    </Link>
+                    {isActive ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-700">
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Active client
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSetActiveClient(client.id)}
+                        isLoading={activatingId === client.id}
+                      >
+                        Set active
+                      </Button>
+                    )}
+                  </div>
+                </Card>
               );
             })}
           </div>
         )}
-
-        {isCreating && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-gray-900">
-                  Create client
-                </h2>
-                <button
-                  onClick={resetForm}
-                  className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-
-              <form className="mt-6 space-y-4" onSubmit={handleCreateClient}>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Client name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    autoFocus
-                    onChange={(event) =>
-                      handleInputChange("name", event.target.value)
-                    }
-                    placeholder="Acme Corp"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Industry
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.industry}
-                      onChange={(event) =>
-                        handleInputChange("industry", event.target.value)
-                      }
-                      placeholder="E-commerce"
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Website
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.website}
-                      onChange={(event) =>
-                        handleInputChange("website", event.target.value)
-                      }
-                      placeholder="https://example.com"
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(event) =>
-                      handleInputChange("description", event.target.value)
-                    }
-                    rows={3}
-                    placeholder="Tell us more about this client"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(event) =>
-                      handleInputChange("notes", event.target.value)
-                    }
-                    rows={3}
-                    placeholder="Internal notes"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-
-                {formError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {formError}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-white font-semibold shadow-lg hover:shadow-xl disabled:opacity-60"
-                  >
-                    {isSubmitting ? "Saving..." : "Create client"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
+
+      <Modal
+        open={isCreating}
+        onClose={resetForm}
+        title="Create client"
+        description="Add a client to start configuring integrations and campaigns."
+      >
+        <form className="space-y-4" onSubmit={handleCreateClient}>
+          <Field label="Client name" htmlFor="client-name" required>
+            <Input
+              id="client-name"
+              type="text"
+              value={formData.name}
+              autoFocus
+              onChange={(event) => handleInputChange("name", event.target.value)}
+              placeholder="Acme Corp"
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Industry" htmlFor="client-industry">
+              <Input
+                id="client-industry"
+                type="text"
+                value={formData.industry}
+                onChange={(event) =>
+                  handleInputChange("industry", event.target.value)
+                }
+                placeholder="E-commerce"
+              />
+            </Field>
+            <Field label="Website" htmlFor="client-website">
+              <Input
+                id="client-website"
+                type="url"
+                value={formData.website}
+                onChange={(event) =>
+                  handleInputChange("website", event.target.value)
+                }
+                placeholder="https://example.com"
+              />
+            </Field>
+          </div>
+
+          <Field label="Description" htmlFor="client-description">
+            <Textarea
+              id="client-description"
+              value={formData.description}
+              onChange={(event) =>
+                handleInputChange("description", event.target.value)
+              }
+              rows={3}
+              placeholder="Tell us more about this client"
+            />
+          </Field>
+
+          <Field label="Notes" htmlFor="client-notes">
+            <Textarea
+              id="client-notes"
+              value={formData.notes}
+              onChange={(event) =>
+                handleInputChange("notes", event.target.value)
+              }
+              rows={3}
+              placeholder="Internal notes"
+            />
+          </Field>
+
+          {formError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {formError}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button type="button" variant="secondary" onClick={resetForm}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isSubmitting}>
+              Create client
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

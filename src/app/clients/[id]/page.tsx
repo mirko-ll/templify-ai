@@ -1,84 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import CustomSelect from "@/components/ui/custom-select";
-import IntegrationCard from "@/components/integrations/IntegrationCard";
-import IntegrationTabs from "@/components/integrations/IntegrationTabs";
 import {
   ArrowLeftIcon,
-  CheckCircleIcon,
-  TrashIcon,
-  XMarkIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
+  CubeIcon,
+  GlobeAltIcon,
+  PuzzlePieceIcon,
+  Squares2X2Icon,
 } from "@heroicons/react/24/outline";
+import ProductCatalogSection from "@/components/products/ProductCatalogSection";
+import { Button } from "@/components/ui/button";
+import { Field, Input } from "@/components/ui/field";
+import { Modal, useConfirm } from "@/components/ui/dialog";
+import { Tabs, type TabDef } from "@/components/ui/tabs";
 import { PageLoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast";
+import { ClientHeader } from "./ClientHeader";
+import { OverviewTab } from "./OverviewTab";
+import { IntegrationsTab } from "./IntegrationsTab";
+import { CountriesTab } from "./CountriesTab";
+import type {
+  Alert,
+  ClientDetail,
+  CountryConfig,
+  SqualoIntegration,
+} from "./types";
 
-interface ClientDetail {
-  id: string;
-  name: string;
-  description?: string | null;
-  industry?: string | null;
-  website?: string | null;
-  notes?: string | null;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-  integrations: Array<{
-    id: string;
-    provider: string;
-    status: string;
-    metadata?: unknown;
-    lastSyncedAt?: string | null;
-  }>;
-  campaigns: Array<{
-    id: string;
-    name: string;
-    status: string;
-    scheduledAt?: string | null;
-    sentAt?: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-}
-
-interface CountryConfig {
-  id: string;
-  countryCode: string;
-  isActive: boolean;
-  mailingListId?: string | null;
-  mailingListName?: string | null;
-  senderEmail?: string | null;
-  senderName?: string | null;
-  lastSyncedAt?: string | null;
-  country?: {
-    code: string;
-    name: string;
-    isActive: boolean;
-  } | null;
-}
-
-interface SqualoIntegration {
-  id: string;
-  provider: string;
-  status: string;
-  metadata?: {
-    lists?: Array<{ id: string; name: string }> | null;
-    [key: string]: unknown;
-  } | null;
-  lastSyncedAt?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-type Alert = { type: "success" | "error"; message: string };
+const TAB_KEYS = ["overview", "products", "integrations", "countries"];
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const clientId = params?.id ?? null;
+
+  const toast = useToast();
+  const { confirm, confirmDialog } = useConfirm();
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [countries, setCountries] = useState<CountryConfig[]>([]);
@@ -96,7 +53,8 @@ export default function ClientDetailPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [integrationAlert, setIntegrationAlert] = useState<Alert | null>(null);
   const [countryAlert, setCountryAlert] = useState<Alert | null>(null);
-  const [showAllCountries, setShowAllCountries] = useState(false);
+
+  const [tab, setTab] = useState("overview");
 
   const request = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -182,26 +140,29 @@ export default function ClientDetailPage() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param && TAB_KEYS.includes(param)) setTab(param);
+  }, []);
+
+  const handleTabChange = (key: string) => {
+    setTab(key);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", key);
+    window.history.replaceState(null, "", url);
+  };
+
   const mailingLists = useMemo(() => {
-    const lists = integration?.metadata && (integration.metadata as any).lists;
+    const lists =
+      integration?.metadata && (integration.metadata as { lists?: unknown }).lists;
     return Array.isArray(lists)
       ? (lists as Array<{ id: string; name: string }>)
       : [];
   }, [integration]);
 
-  const mailingListOptions = useMemo(
-    () => [
-      { value: "", label: "No mailing list" },
-      ...mailingLists.map((list) => ({ value: list.id, label: list.name })),
-    ],
-    [mailingLists]
-  );
-
   const handleSetActive = async () => {
     if (!clientId) return;
     setSavingActive(true);
-    setError(null);
-
     try {
       await request(`/api/clients/active`, {
         method: "POST",
@@ -209,10 +170,12 @@ export default function ClientDetailPage() {
         body: JSON.stringify({ clientId }),
       });
       setActiveClientId(clientId);
+      toast.success("Active client set", `${client?.name ?? "Client"} is now active.`);
     } catch (err) {
       console.error(err);
-      setError(
-        err instanceof Error ? err.message : "Unable to set active client"
+      toast.error(
+        "Couldn't set active client",
+        err instanceof Error ? err.message : undefined
       );
     } finally {
       setSavingActive(false);
@@ -221,19 +184,25 @@ export default function ClientDetailPage() {
 
   const handleDeleteClient = async () => {
     if (!clientId || !client) return;
-    const confirmed = window.confirm(
-      `Delete client "${client.name}"? This will archive their data and remove access from your workspace.`
-    );
+    const confirmed = await confirm({
+      title: `Delete ${client.name}?`,
+      description:
+        "This archives their data and removes access from your workspace.",
+      confirmLabel: "Delete client",
+      confirmVariant: "danger",
+    });
     if (!confirmed) return;
 
     setDeleting(true);
-    setError(null);
     try {
       await request(`/api/clients/${clientId}`, { method: "DELETE" });
       router.push("/clients");
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Failed to delete client");
+      toast.error(
+        "Couldn't delete client",
+        err instanceof Error ? err.message : undefined
+      );
       setDeleting(false);
     }
   };
@@ -264,6 +233,7 @@ export default function ClientDetailPage() {
         type: "success",
         message: "SqualoMail connected successfully.",
       });
+      toast.success("SqualoMail connected");
     } catch (err) {
       console.error(err);
       setIntegrationAlert({
@@ -287,6 +257,7 @@ export default function ClientDetailPage() {
         type: "success",
         message: "Integration disconnected.",
       });
+      toast.success("Integration disconnected");
     } catch (err) {
       console.error(err);
       setIntegrationAlert({
@@ -360,12 +331,12 @@ export default function ClientDetailPage() {
 
   const renderAlert = (alert: Alert | null) => {
     if (!alert) return null;
-    const style =
+    const styles =
       alert.type === "success"
-        ? "border-green-200 bg-green-50 text-green-700"
-        : "border-red-200 bg-red-50 text-red-700";
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-rose-200 bg-rose-50 text-rose-700";
     return (
-      <div className={`rounded-xl border px-4 py-3 text-sm ${style}`}>
+      <div className={`rounded-lg border px-4 py-3 text-sm ${styles}`}>
         {alert.message}
       </div>
     );
@@ -373,7 +344,7 @@ export default function ClientDetailPage() {
 
   if (!clientId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-500">
+      <div className="flex min-h-screen items-center justify-center bg-canvas text-muted">
         Invalid client id.
       </div>
     );
@@ -385,355 +356,137 @@ export default function ClientDetailPage() {
 
   if (error || !client) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4 px-4 text-center">
-        <p className="text-red-600 font-medium">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas px-4 text-center">
+        <p className="font-medium text-rose-600">
           {error || "Client unavailable"}
         </p>
-        <button
+        <Button
+          variant="secondary"
           onClick={() => router.push("/clients")}
-          className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          leftIcon={<ArrowLeftIcon className="h-4 w-4" />}
         >
-          <ArrowLeftIcon className="w-4 h-4" /> Back to clients
-        </button>
+          Back to clients
+        </Button>
       </div>
     );
   }
 
   const connectedIntegrations = integration ? 1 : 0;
   const activeCountriesCount = countries.filter((c) => c.isActive).length;
-  const totalCampaigns = client.campaigns?.length || 0;
 
-  const displayedCountries = showAllCountries
-    ? countries
-    : countries.filter((c) => c.isActive);
+  const tabs: TabDef[] = [
+    {
+      key: "overview",
+      label: "Overview",
+      icon: <Squares2X2Icon className="h-4 w-4" />,
+      content: (
+        <OverviewTab
+          client={client}
+          countries={countries}
+          integration={integration}
+        />
+      ),
+    },
+    {
+      key: "products",
+      label: "Products & Planning",
+      icon: <CubeIcon className="h-4 w-4" />,
+      content: <ProductCatalogSection clientId={client.id} />,
+    },
+    {
+      key: "integrations",
+      label: "Integrations",
+      icon: <PuzzlePieceIcon className="h-4 w-4" />,
+      badge: connectedIntegrations || undefined,
+      content: (
+        <IntegrationsTab
+          clientId={client.id}
+          integration={integration}
+          countries={countries}
+          integrationAlert={integrationAlert}
+          renderAlert={renderAlert}
+          onConnect={() => {
+            setIntegrationAlert(null);
+            setIntegrationModalOpen(true);
+          }}
+          onDisconnect={handleDisconnectIntegration}
+          onRefresh={refreshMailingLists}
+          onUpdateCountry={updateCountry}
+        />
+      ),
+    },
+    {
+      key: "countries",
+      label: "Countries",
+      icon: <GlobeAltIcon className="h-4 w-4" />,
+      badge: activeCountriesCount || undefined,
+      content: (
+        <CountriesTab
+          countries={countries}
+          mailingLists={mailingLists}
+          countryAlert={countryAlert}
+          renderAlert={renderAlert}
+          onUpdateCountry={updateCountry}
+        />
+      ),
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        {/* Header Section */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 text-sm text-slate-500">
-              <Link
-                href="/clients"
-                className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-              >
-                <ArrowLeftIcon className="w-4 h-4" /> Back to clients
-              </Link>
-              <span>/</span>
-              <span>{client.name}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 mt-2">
-              <h1 className="text-4xl font-bold text-slate-900">
-                {client.name}
-              </h1>
-              {activeClientId === client.id && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
-                  <CheckCircleIcon className="h-4 w-4" />
-                  Active Client
-                </span>
-              )}
-            </div>
-            {client.industry && (
-              <p className="text-indigo-600 font-semibold mt-2">
-                {client.industry}
-              </p>
-            )}
-            {client.description && (
-              <p className="text-slate-600 mt-2 max-w-2xl">
-                {client.description}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {activeClientId !== client.id && (
-              <button
-                onClick={handleSetActive}
-                disabled={savingActive}
-                className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-60"
-              >
-                {savingActive ? "Setting..." : "Set as Active"}
-              </button>
-            )}
-            <button
-              onClick={handleDeleteClient}
-              disabled={deleting}
-              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
-            >
-              <TrashIcon className="w-4 h-4" />
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
-          </div>
-        </div>
+    <div className="app-canvas min-h-screen">
+      <ClientHeader
+        client={client}
+        isActive={activeClientId === client.id}
+        savingActive={savingActive}
+        deleting={deleting}
+        onSetActive={handleSetActive}
+        onDelete={handleDeleteClient}
+      />
 
-        {/* Quick Stats Bar */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Integrations
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
-              {connectedIntegrations}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Email service{connectedIntegrations !== 1 ? "s" : ""} connected
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Active Countries
-            </p>
-            <p className="mt-2 text-3xl font-bold text-emerald-600">
-              {activeCountriesCount}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              of {countries.length} configured
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Campaigns
-            </p>
-            <p className="mt-2 text-3xl font-bold text-blue-600">
-              {totalCampaigns}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">Total campaigns sent</p>
-          </div>
-        </div>
-
-        {/* Integration Cards Section */}
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">Integrations</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Connect email service providers to manage campaigns
-            </p>
-          </div>
-
-          {renderAlert(integrationAlert)}
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <IntegrationCard
-              provider="SQUALOMAIL"
-              integration={integration}
-              onConnect={() => {
-                setIntegrationAlert(null);
-                setIntegrationModalOpen(true);
-              }}
-              onDisconnect={handleDisconnectIntegration}
-              onRefresh={refreshMailingLists}
-            />
-            <IntegrationCard
-              provider="KLAVIYO"
-              integration={null}
-              onConnect={() => {}}
-              onDisconnect={() => {}}
-              onRefresh={() => {}}
-            />
-            <IntegrationCard
-              provider="MAILCHIMP"
-              integration={null}
-              onConnect={() => {}}
-              onDisconnect={() => {}}
-              onRefresh={() => {}}
-            />
-          </div>
-        </section>
-
-        {/* Integration Configuration Tabs */}
-        {integration && clientId && (
-          <IntegrationTabs
-            clientId={clientId}
-            integration={integration}
-            countries={countries}
-            onUpdateCountry={updateCountry}
-            onRefresh={refreshMailingLists}
-            onDisconnect={handleDisconnectIntegration}
-            renderAlert={renderAlert}
-            alert={integrationAlert}
-          />
-        )}
-
-        {/* Country Configuration Section */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">
-                Country Configuration
-              </h2>
-              <p className="text-sm text-slate-600">
-                Enable countries and configure their settings
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAllCountries(!showAllCountries)}
-              className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              {showAllCountries ? (
-                <>
-                  <ChevronUpIcon className="h-4 w-4" />
-                  Show Active Only
-                </>
-              ) : (
-                <>
-                  <ChevronDownIcon className="h-4 w-4" />
-                  Show All Countries
-                </>
-              )}
-            </button>
-          </div>
-
-          {renderAlert(countryAlert)}
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {displayedCountries.map((country) => {
-              const listId = country.mailingListId ?? "";
-              return (
-                <div
-                  key={country.id}
-                  className={`relative rounded-xl border p-4 transition ${
-                    country.isActive
-                      ? "border-emerald-200 bg-emerald-50"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
-                        {country.country?.name || country.countryCode}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {country.countryCode}
-                      </p>
-                    </div>
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={country.isActive}
-                        onChange={() =>
-                          updateCountry(
-                            country.countryCode,
-                            { isActive: !country.isActive },
-                            `${
-                              country.country?.name || country.countryCode
-                            } ${country.isActive ? "deactivated" : "activated"}`
-                          )
-                        }
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                    </label>
-                  </div>
-
-                  {country.isActive && (
-                    <div className="mt-3">
-                      {mailingLists.length === 0 ? (
-                        <p className="text-xs text-slate-500">
-                          No mailing lists available
-                        </p>
-                      ) : (
-                        <CustomSelect
-                          options={mailingListOptions}
-                          value={listId}
-                          onChange={(selected) =>
-                            updateCountry(
-                              country.countryCode,
-                              {
-                                mailingListId: selected || null,
-                                mailingListName:
-                                  mailingLists.find(
-                                    (list) => list.id === selected
-                                  )?.name ?? null,
-                              },
-                              selected
-                                ? "Mailing list saved"
-                                : "Mailing list cleared"
-                            )
-                          }
-                          placeholder="Select list"
-                          gradientFrom="white"
-                          gradientTo="emerald-50"
-                          borderColor="emerald-200"
-                          textColor="slate-700"
-                          hoverFrom="emerald-100"
-                          hoverTo="emerald-200"
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {displayedCountries.length === 0 && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-500">
-                {showAllCountries
-                  ? "No countries configured"
-                  : "No active countries. Click 'Show All Countries' to configure."}
-              </p>
-            </div>
-          )}
-        </section>
+      <div className="relative z-10 mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+        <Tabs tabs={tabs} value={tab} onChange={handleTabChange} />
       </div>
 
-      {integrationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Connect SqualoMail
-              </h2>
-              <button
-                onClick={() => setIntegrationModalOpen(false)}
-                className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
-              >
-                <XMarkIcon className="w-4 h-4" />
-              </button>
+      <Modal
+        open={integrationModalOpen}
+        onClose={() => setIntegrationModalOpen(false)}
+        title="Connect SqualoMail"
+        description="Enter your SqualoMail API key to connect this client."
+        size="sm"
+      >
+        <form className="space-y-4" onSubmit={handleConnectIntegration}>
+          <Field label="SqualoMail API key" htmlFor="squalo-api-key" required>
+            <Input
+              id="squalo-api-key"
+              type="text"
+              value={apiKeyInput}
+              onChange={(event) => setApiKeyInput(event.target.value)}
+              placeholder="Enter API key"
+              required
+              autoFocus
+            />
+          </Field>
+
+          {integrationAlert?.type === "error" && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {integrationAlert.message}
             </div>
-            <form
-              className="mt-6 space-y-4"
-              onSubmit={handleConnectIntegration}
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIntegrationModalOpen(false)}
             >
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  SqualoMail API key
-                </label>
-                <input
-                  type="text"
-                  value={apiKeyInput}
-                  onChange={(event) => setApiKeyInput(event.target.value)}
-                  placeholder="Enter API key"
-                  required
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                />
-              </div>
-
-              {integrationAlert?.type === "error" && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {integrationAlert.message}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIntegrationModalOpen(false)}
-                  className="cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-white font-semibold shadow-lg hover:shadow-xl"
-                >
-                  Connect
-                </button>
-              </div>
-            </form>
+              Cancel
+            </Button>
+            <Button type="submit">Connect</Button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
+
+      {confirmDialog}
     </div>
   );
 }
