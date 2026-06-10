@@ -24,11 +24,15 @@ import {
   ArrowPathIcon,
   PlusIcon,
   PhotoIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import ExternalImage from "@/components/ui/external-image";
+import { CatalogSearchModal, type GroupedOffer } from "./CatalogSearchModal";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import MailingListOverrideSection from "@/components/publish/MailingListOverrideSection";
 import { templateUIConfig } from "@/lib/template-config";
-import { buildCampaignUrl, type CampaignUrlRule } from "@/lib/product-links";
+import { buildCampaignUrl } from "@/lib/product-links";
+import { pickCanonicalListing } from "@/lib/product-grouping";
 import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
 import type {
   Template,
@@ -97,24 +101,6 @@ interface SqualoIntegration {
   } | null;
 }
 
-interface CatalogProductListing {
-  id: string;
-  countryCode: string | null;
-  url: string;
-  slug: string | null;
-  priceRaw: string | null;
-  campaignUrl: string;
-  campaignUrlRule?: CampaignUrlRule | null;
-}
-
-interface CatalogProduct {
-  id: string;
-  title: string;
-  normalizedTitle: string;
-  bestImageUrl: string | null;
-  status: string;
-  listings: CatalogProductListing[];
-}
 
 function buildCountryUrlState(
   configs: ClientCountryConfigSummary[],
@@ -189,9 +175,8 @@ function TemplaitoApp() {
     ClientCountryConfigSummary[]
   >([]);
   const [countryUrls, setCountryUrls] = useState<Record<string, string[]>>({});
-  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
+  const [catalogSearchOpen, setCatalogSearchOpen] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState<GroupedOffer | null>(null);
   const [catalogPrice, setCatalogPrice] = useState("");
   const [catalogError, setCatalogError] = useState("");
   const [selectedCountryTab, setSelectedCountryTab] = useState<string | null>(
@@ -285,13 +270,6 @@ function TemplaitoApp() {
     const lists = integration?.metadata?.lists;
     return Array.isArray(lists) ? lists : [];
   }, [integration]);
-
-  const selectedCatalogProduct = useMemo(
-    () =>
-      catalogProducts.find((product) => product.id === selectedCatalogProductId) ??
-      null,
-    [catalogProducts, selectedCatalogProductId]
-  );
 
   // Fetch available prompts on component mount
   useEffect(() => {
@@ -498,29 +476,6 @@ function TemplaitoApp() {
     }
   };
 
-  const loadProductCatalog = async (clientId: string) => {
-    setCatalogLoading(true);
-    setCatalogError("");
-    try {
-      const response = await fetch(
-        `/api/clients/${clientId}/products?status=ACTIVE&limit=100`
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to load synced products");
-      }
-      setCatalogProducts(Array.isArray(data.products) ? data.products : []);
-    } catch (err) {
-      console.error("Failed to load product catalog", err);
-      setCatalogProducts([]);
-      setCatalogError(
-        err instanceof Error ? err.message : "Unable to load synced products"
-      );
-    } finally {
-      setCatalogLoading(false);
-    }
-  };
-
   const loadClientContext = async () => {
     setContextLoading(true);
     try {
@@ -542,8 +497,7 @@ function TemplaitoApp() {
       if (!clientId) {
         setCountryConfigs([]);
         setCountryUrls({});
-        setCatalogProducts([]);
-        setSelectedCatalogProductId("");
+        setSelectedOffer(null);
         // Enable single URL mode when no active client (for everyone)
         setSingleUrlMode(true);
         setError("");
@@ -588,7 +542,6 @@ function TemplaitoApp() {
       setCountryUrls((previous) => buildCountryUrlState(eligible, previous));
       setSingleUrlMode(false); // Disable single URL mode when client is active
       setError("");
-      loadProductCatalog(clientId);
 
       // Fetch integration to get available mailing lists for overrides
       try {
@@ -760,36 +713,49 @@ function TemplaitoApp() {
     [countryConfigs]
   );
 
+  /** When picking an offer, default the price to its SI (else first) listing. */
+  const handleSelectOffer = (offer: GroupedOffer) => {
+    setSelectedOffer(offer);
+    setCatalogError("");
+    const priced =
+      offer.listings.find((l) => l.countryCode === "SI" && l.priceRaw) ??
+      offer.listings.find((l) => l.priceRaw);
+    setCatalogPrice(priced?.priceRaw ?? "");
+  };
+
   const applyCatalogProduct = () => {
-    if (!selectedCatalogProduct) {
-      setCatalogError("Choose a synced product first.");
+    if (!selectedOffer) {
+      setCatalogError("Search and choose a product first.");
       return;
     }
 
-    const activeCodes = new Set(countryConfigs.map((config) => config.countryCode));
+    // Landing-page / duplicate variants (…-lp, …-2, …-3) share an offer's SKU,
+    // so a country can have several listings. Fill ONE canonical URL per country.
     const next: Record<string, string[]> = {};
     let matched = 0;
 
     countryConfigs.forEach((config) => {
-      const exactListings = selectedCatalogProduct.listings.filter(
+      const listings = selectedOffer.listings.filter(
         (listing) => listing.countryCode === config.countryCode
       );
-      const fallbackListings =
-        exactListings.length > 0
-          ? exactListings
-          : selectedCatalogProduct.listings.filter(
-              (listing) => !listing.countryCode && activeCodes.size <= 1
-            );
 
-      if (fallbackListings.length > 0) {
-        next[config.countryCode] = fallbackListings.map((listing) =>
+      if (listings.length > 0) {
+        const chosen = pickCanonicalListing(listings);
+        next[config.countryCode] = [
           buildCampaignUrl({
-            product: selectedCatalogProduct,
-            listing,
-            rule: listing.campaignUrlRule,
-            price: catalogPrice || listing.priceRaw,
-          })
-        );
+            product: {
+              title: chosen.title ?? selectedOffer.title,
+              normalizedTitle: chosen.normalizedTitle,
+            },
+            listing: {
+              url: chosen.url,
+              slug: chosen.slug,
+              countryCode: chosen.countryCode,
+            },
+            rule: chosen.campaignUrlRule,
+            price: catalogPrice || chosen.priceRaw,
+          }),
+        ];
         matched++;
       } else {
         next[config.countryCode] = countryUrls[config.countryCode] ?? [""];
@@ -810,7 +776,7 @@ function TemplaitoApp() {
     }
     setCatalogError("");
     setPasteToast(
-      `Filled ${matched} countr${matched > 1 ? "ies" : "y"} from ${selectedCatalogProduct.title}`
+      `Filled ${matched} countr${matched > 1 ? "ies" : "y"} from ${selectedOffer.title}`
     );
   };
 
@@ -1162,6 +1128,10 @@ function TemplaitoApp() {
     }
     if (!publishForm.subject.trim()) {
       setPublishError("Subject is required.");
+      return;
+    }
+    if (isResendMode && !publishForm.sendDate) {
+      setPublishError("Pick a send date and time for the resend.");
       return;
     }
     if (
@@ -1598,6 +1568,12 @@ function TemplaitoApp() {
 
   return (
     <>
+      <CatalogSearchModal
+        open={catalogSearchOpen}
+        clientId={activeClientId}
+        onClose={() => setCatalogSearchOpen(false)}
+        onSelect={handleSelectOffer}
+      />
       {globalToast && (
         <div className="fixed top-4 right-4 z-[2000] max-w-sm rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
           <div className="flex items-start gap-3">
@@ -1760,71 +1736,87 @@ function TemplaitoApp() {
                         </div>
                       ) : (
                         <>
-                          {catalogProducts.length > 0 || catalogLoading || catalogError ? (
-                            <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                                <div className="flex-1">
-                                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                                    Synced product
-                                  </label>
-                                  <select
-                                    value={selectedCatalogProductId}
-                                    onChange={(event) => {
-                                      const productId = event.target.value;
-                                      const product = catalogProducts.find(
-                                        (item) => item.id === productId
-                                      );
-                                      setSelectedCatalogProductId(productId);
-                                      setCatalogPrice(
-                                        product?.listings.find(
-                                          (listing) => listing.priceRaw
-                                        )?.priceRaw ?? ""
-                                      );
-                                    }}
-                                    className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                                  >
-                                    <option value="">
-                                      {catalogLoading
-                                        ? "Loading products..."
-                                        : "Choose product from catalog"}
-                                    </option>
-                                    {catalogProducts.map((product) => (
-                                      <option key={product.id} value={product.id}>
-                                        {product.title}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="lg:w-36">
-                                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                                    Price
-                                  </label>
-                                  <input
-                                    value={catalogPrice}
-                                    onChange={(event) =>
-                                      setCatalogPrice(event.target.value)
-                                    }
-                                    placeholder="19"
-                                    className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                                  />
+                          <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                            {!selectedOffer ? (
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="text-sm font-semibold text-indigo-900">
+                                    Use a synced product
+                                  </p>
+                                  <p className="text-xs text-indigo-700/70">
+                                    Search your catalog to auto-fill the country
+                                    URLs below.
+                                  </p>
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={applyCatalogProduct}
-                                  disabled={!selectedCatalogProductId}
-                                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                  onClick={() => setCatalogSearchOpen(true)}
+                                  className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                                 >
-                                  <LinkIcon className="h-4 w-4" />
-                                  Fill URLs
+                                  <MagnifyingGlassIcon className="h-4 w-4" />
+                                  Search products
                                 </button>
                               </div>
-                              {catalogError && (
-                                <p className="mt-2 text-xs font-medium text-red-600">
-                                  {catalogError}
-                                </p>
-                              )}
-                            </div>
-                          ) : null}
+                            ) : (
+                              <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-indigo-100 bg-white">
+                                    {selectedOffer.bestImageUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={selectedOffer.bestImageUrl}
+                                        alt={selectedOffer.slug}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : null}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold text-slate-900">
+                                      {selectedOffer.slug}
+                                    </p>
+                                    <p className="truncate text-xs text-gray-500">
+                                      {selectedOffer.title}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCatalogSearchOpen(true)}
+                                    className="shrink-0 cursor-pointer rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                                  >
+                                    Change
+                                  </button>
+                                </div>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                  <div className="sm:w-36">
+                                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                                      Price
+                                    </label>
+                                    <input
+                                      value={catalogPrice}
+                                      onChange={(event) =>
+                                        setCatalogPrice(event.target.value)
+                                      }
+                                      placeholder="19"
+                                      className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={applyCatalogProduct}
+                                    className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                                  >
+                                    <LinkIcon className="h-4 w-4" />
+                                    Fill URLs
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {catalogError && (
+                              <p className="mt-2 text-xs font-medium text-red-600">
+                                {catalogError}
+                              </p>
+                            )}
+                          </div>
 
                           {/* Smart Paste Area */}
                           <div className="mb-4">
@@ -2838,14 +2830,13 @@ function TemplaitoApp() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {isResendMode ? "Send date/time *" : "Send date/time (optional)"}
                   </label>
-                  <input
-                    type="datetime-local"
+                  <DateTimePicker
+                    mode="datetime"
+                    disablePast
+                    clearable={!isResendMode}
+                    placeholder="Select date & time"
                     value={publishForm.sendDate}
-                    onChange={(e) =>
-                      updatePublishForm("sendDate", e.target.value)
-                    }
-                    required={isResendMode}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                    onChange={(next) => updatePublishForm("sendDate", next)}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {isResendMode

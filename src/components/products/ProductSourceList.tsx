@@ -5,6 +5,7 @@ import {
   ArrowPathIcon,
   ChevronDownIcon,
   LinkIcon,
+  PencilSquareIcon,
   RssIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
@@ -20,7 +21,10 @@ interface ProductSourceListProps {
   sources: ProductSource[];
   syncingSourceId: string | null;
   removingSourceId: string | null;
+  syncingAll?: boolean;
   onSync: (id: string) => void;
+  onSyncAll?: () => void;
+  onEdit: (source: ProductSource) => void;
   onRemove: (id: string) => void;
 }
 
@@ -28,7 +32,10 @@ export function ProductSourceList({
   sources,
   syncingSourceId,
   removingSourceId,
+  syncingAll = false,
   onSync,
+  onSyncAll,
+  onEdit,
   onRemove,
 }: ProductSourceListProps) {
   const [showAll, setShowAll] = useState(false);
@@ -50,6 +57,26 @@ export function ProductSourceList({
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-ink">
+          Sources{" "}
+          <span className="font-normal text-muted">({sources.length})</span>
+        </h3>
+        {onSyncAll && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onSyncAll}
+            disabled={syncingAll || syncingSourceId !== null}
+            isLoading={syncingAll}
+            leftIcon={
+              !syncingAll ? <ArrowPathIcon className="h-4 w-4" /> : undefined
+            }
+          >
+            {syncingAll ? "Starting…" : "Sync all"}
+          </Button>
+        )}
+      </div>
       <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-soft">
         <ul className="divide-y divide-line">
           {visibleSources.map((source) => {
@@ -120,10 +147,13 @@ export function ProductSourceList({
                     variant="subtle"
                     size="sm"
                     onClick={() => onSync(source.id)}
-                    disabled={isSyncing || isRemoving}
+                    disabled={isSyncing || isRemoving || syncingAll}
                     leftIcon={
                       <ArrowPathIcon
-                        className={cn("h-4 w-4", isSyncing && "animate-spin")}
+                        className={cn(
+                          "h-4 w-4",
+                          (isSyncing || syncingAll) && "animate-spin"
+                        )}
                       />
                     }
                   >
@@ -134,8 +164,19 @@ export function ProductSourceList({
                   <Button
                     variant="secondary"
                     size="icon"
+                    onClick={() => onEdit(source)}
+                    disabled={isSyncing || isRemoving || syncingAll}
+                    title="Edit source"
+                    aria-label="Edit source"
+                    className="h-8 w-8"
+                  >
+                    <PencilSquareIcon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
                     onClick={() => onRemove(source.id)}
-                    disabled={isRemoving || isSyncing}
+                    disabled={isRemoving || isSyncing || syncingAll}
                     isLoading={isRemoving}
                     title="Remove source"
                     aria-label="Remove source"

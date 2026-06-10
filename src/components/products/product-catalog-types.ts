@@ -1,3 +1,7 @@
+import type { ProductSourceConfig } from "@/lib/product-source-config";
+
+export type { ProductSourceConfig };
+
 export interface ProductSyncRun {
   id: string;
   status: string;
@@ -16,7 +20,9 @@ export interface ProductSource {
   name: string | null;
   url: string;
   countryCode: string | null;
+  crawlDepth: number;
   isEnabled: boolean;
+  config: ProductSourceConfig | null;
   lastSyncedAt: string | null;
   syncRuns: ProductSyncRun[];
 }
@@ -106,6 +112,27 @@ export function parseTemplateOverrides(
       })
       .filter((entry): entry is [string, string] => Boolean(entry))
   );
+}
+
+/** Render a "{ KEY: value }" map as editable "KEY=value" lines. */
+export function recordToLines(record: Record<string, string> | undefined | null): string {
+  if (!record) return "";
+  return Object.entries(record)
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+}
+
+/** Split a textarea of one-value-per-line into a trimmed, non-empty array. */
+export function linesToArray(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/** Render an array as one-value-per-line text for a textarea. */
+export function arrayToLines(value: string[] | undefined | null): string {
+  return Array.isArray(value) ? value.join("\n") : "";
 }
 
 export function formatDate(value: string | null | undefined): string {

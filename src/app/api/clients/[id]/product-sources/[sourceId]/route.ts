@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyUnlessClientAccess } from "@/lib/client-access";
+import { normalizeProductSourceConfig } from "@/lib/product-source-config";
 
 async function ensureSource(clientId: string, sourceId: string) {
   return prisma.productSource.findFirst({
@@ -64,7 +65,7 @@ export async function PATCH(
     data.crawlDepth = Math.max(1, Math.min(Math.floor(body.crawlDepth), 3));
   }
   if (body?.config && typeof body.config === "object" && !Array.isArray(body.config)) {
-    data.config = body.config;
+    data.config = normalizeProductSourceConfig(body.config) ?? undefined;
   }
 
   if (Object.keys(data).length === 0) {

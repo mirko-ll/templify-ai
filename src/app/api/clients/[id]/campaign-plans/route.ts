@@ -24,8 +24,22 @@ export async function GET(
   const access = await denyUnlessClientAccess(id, userId);
   if (access.response) return access.response;
 
+  const { searchParams } = new URL(_request.url);
+  const monthParam = Number.parseInt(searchParams.get("month") ?? "", 10);
+  const yearParam = Number.parseInt(searchParams.get("year") ?? "", 10);
+  const month =
+    Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12
+      ? monthParam
+      : undefined;
+  const year =
+    Number.isFinite(yearParam) && yearParam >= 2020 ? yearParam : undefined;
+
   const plans = await prisma.campaignPlan.findMany({
-    where: { clientId: id },
+    where: {
+      clientId: id,
+      ...(month ? { month } : {}),
+      ...(year ? { year } : {}),
+    },
     orderBy: [{ year: "desc" }, { month: "desc" }, { createdAt: "desc" }],
     take: 24,
     include: {
@@ -84,6 +98,35 @@ export async function POST(
     typeof body?.name === "string" && body.name.trim()
       ? body.name.trim()
       : `${year}-${String(month).padStart(2, "0")} Campaign Plan`;
+
+  const planInclude = {
+    items: {
+      orderBy: { position: "asc" as const },
+      include: {
+        product: {
+          select: {
+            id: true,
+            title: true,
+            bestImageUrl: true,
+            status: true,
+          },
+        },
+      },
+    },
+  };
+
+  // Manual months are a single editable draft per (client, year, month) — reuse
+  // the existing draft instead of creating duplicates each time the planner opens.
+  if (mode === "MANUAL") {
+    const existing = await prisma.campaignPlan.findFirst({
+      where: { clientId: id, year, month, mode: "MANUAL", status: "DRAFT" },
+      orderBy: { createdAt: "desc" },
+      include: planInclude,
+    });
+    if (existing) {
+      return NextResponse.json({ plan: existing });
+    }
+  }
 
   const products =
     mode === "ASSISTED"
@@ -145,21 +188,7 @@ export async function POST(
             }
           : undefined,
     },
-    include: {
-      items: {
-        orderBy: { position: "asc" },
-        include: {
-          product: {
-            select: {
-              id: true,
-              title: true,
-              bestImageUrl: true,
-              status: true,
-            },
-          },
-        },
-      },
-    },
+    include: planInclude,
   });
 
   return NextResponse.json({ plan }, { status: 201 });

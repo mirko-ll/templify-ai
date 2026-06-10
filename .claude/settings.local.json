@@ -21,7 +21,12 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>console.log\\(JSON.stringify\\(JSON.parse\\(d\\).scripts,null,2\\)\\)\\)\")",
       "Bash(curl -sL -A \"Mozilla/5.0 \\(compatible; TemplaitoProductSync/1.0\\)\" \"https://coolmango.si/wp-sitemap.xml\")",
       "Bash(curl -sL -A \"Mozilla/5.0 \\(compatible; TemplaitoProductSync/1.0\\)\" \"https://coolmango.si/robots.txt\")",
-      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('src/components/products/ProductCatalogSection.tsx','utf8'\\);const dead=['productUrlPattern','crawlUrlPattern','crawlDepth','maxPages','maxCrawlPages','renderMode','scrollRounds','loadMoreSelector','loadMoreClickLimit'].filter\\(k=>s.includes\\('sourceForm.'+k\\)\\);console.log\\('orphaned removed-field refs:', dead.length?dead.join\\(', '\\):'none'\\);console.log\\('fragments:', \\(s.match\\(/<>/g\\)||[]\\).length, 'open /', \\(s.match\\(/<\\\\/>/g\\)||[]\\).length, 'close'\\);console.log\\('kept campaign fields:', ['campaignUrlTemplate','defaultPrice','countryCampaignUrlTemplates','domainCampaignUrlTemplates'].every\\(k=>s.includes\\('sourceForm.'+k\\)\\)\\);\")"
+      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('src/components/products/ProductCatalogSection.tsx','utf8'\\);const dead=['productUrlPattern','crawlUrlPattern','crawlDepth','maxPages','maxCrawlPages','renderMode','scrollRounds','loadMoreSelector','loadMoreClickLimit'].filter\\(k=>s.includes\\('sourceForm.'+k\\)\\);console.log\\('orphaned removed-field refs:', dead.length?dead.join\\(', '\\):'none'\\);console.log\\('fragments:', \\(s.match\\(/<>/g\\)||[]\\).length, 'open /', \\(s.match\\(/<\\\\/>/g\\)||[]\\).length, 'close'\\);console.log\\('kept campaign fields:', ['campaignUrlTemplate','defaultPrice','countryCampaignUrlTemplates','domainCampaignUrlTemplates'].every\\(k=>s.includes\\('sourceForm.'+k\\)\\)\\);\")",
+      "Bash(find src/app/clients -type f)",
+      "Bash(find \"src/app/clients\" -path \"*planner*\" -type f)",
+      "Bash(find \"src/app/api/clients\" -path \"*grouped*\" -type f)",
+      "Bash(npx eslint *)",
+      "Bash(npx tsx *)"
     ],
     "deny": [],
     "ask": [],

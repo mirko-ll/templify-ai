@@ -17,6 +17,7 @@ interface MonthlyPlansSectionProps {
   approvingPlanId: string | null;
   onCreatePlan: (mode: "MANUAL" | "ASSISTED") => void;
   onApprovePlan: (id: string) => void;
+  onOpenPlanner: (target?: { year: number; month: number }) => void;
 }
 
 export function MonthlyPlansSection({
@@ -25,25 +26,17 @@ export function MonthlyPlansSection({
   approvingPlanId,
   onCreatePlan,
   onApprovePlan,
+  onOpenPlanner,
 }: MonthlyPlansSectionProps) {
   return (
     <div className="space-y-4">
       <SectionHeader
         title="Monthly plans"
-        description="Create a manual month or let Templaito suggest products for review."
+        description="Plan a product for each day of the month, or let Templaito suggest products for review."
         actions={
           <>
             <Button
               variant="secondary"
-              size="sm"
-              onClick={() => onCreatePlan("MANUAL")}
-              disabled={creatingPlan !== null}
-              isLoading={creatingPlan === "MANUAL"}
-              leftIcon={<CalendarDaysIcon className="h-4 w-4" />}
-            >
-              Manual month
-            </Button>
-            <Button
               size="sm"
               onClick={() => onCreatePlan("ASSISTED")}
               disabled={creatingPlan !== null}
@@ -51,6 +44,13 @@ export function MonthlyPlansSection({
               leftIcon={<SparklesIcon className="h-4 w-4" />}
             >
               Assisted suggestion
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => onOpenPlanner()}
+              leftIcon={<CalendarDaysIcon className="h-4 w-4" />}
+            >
+              Plan this month
             </Button>
           </>
         }
@@ -84,19 +84,30 @@ export function MonthlyPlansSection({
                     : "Ready for manual product selection"}
                 </p>
               </div>
-              {plan.status === "DRAFT" && (
+              <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => onApprovePlan(plan.id)}
-                  disabled={approvingPlanId === plan.id}
-                  isLoading={approvingPlanId === plan.id}
-                  leftIcon={<CheckCircleIcon className="h-4 w-4" />}
-                  className="text-emerald-700 hover:bg-emerald-50"
+                  onClick={() =>
+                    onOpenPlanner({ year: plan.year, month: plan.month })
+                  }
                 >
-                  Approve
+                  Open
                 </Button>
-              )}
+                {plan.status === "DRAFT" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onApprovePlan(plan.id)}
+                    disabled={approvingPlanId === plan.id}
+                    isLoading={approvingPlanId === plan.id}
+                    leftIcon={<CheckCircleIcon className="h-4 w-4" />}
+                    className="text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Approve
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>

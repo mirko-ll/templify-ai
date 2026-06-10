@@ -343,6 +343,7 @@ model Product {
   externalKey     String?
   title           String
   normalizedTitle String
+  groupKey        String?
   description     String?       @db.Text
   canonicalUrl    String?       @db.Text
   bestImageUrl    String?       @db.Text
@@ -362,6 +363,7 @@ model Product {
   @@index([clientId])
   @@index([status])
   @@index([normalizedTitle])
+  @@index([clientId, groupKey])
 }
 
 model ProductListing {
@@ -474,21 +476,27 @@ model CampaignPlan {
 }
 
 model CampaignPlanItem {
-  id               String               @id @default(cuid())
+  id               String                 @id @default(cuid())
   planId           String
   productId        String?
   campaignId       String?
-  type             CampaignPlanItemType @default(TEST)
-  position         Int                  @default(0)
+  type             CampaignPlanItemType   @default(TEST)
+  status           CampaignPlanItemStatus @default(PLANNED)
+  position         Int                    @default(0)
   sendDate         DateTime?
   countryCodes     Json?
   templateId       String?
-  selectedImageUrl String?              @db.Text
+  groupKey         String?
+  subject          String?                @db.Text
+  preheader        String?                @db.Text
+  mailingListOverrides Json?
+  selectedImageUrl String?                @db.Text
   priceOverride    String?
-  notes            String?              @db.Text
+  notes            String?                @db.Text
+  errorMessage     String?                @db.Text
   productSnapshot  Json?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
   plan    CampaignPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   product Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -580,4 +588,12 @@ enum CampaignPlanItemType {
   WINNER
   TEST
   MANUAL
+}
+
+enum CampaignPlanItemStatus {
+  PLANNED
+  QUEUED
+  GENERATING
+  SCHEDULED
+  FAILED
 }

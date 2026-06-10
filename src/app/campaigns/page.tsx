@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomSelect from "@/components/ui/custom-select";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   ArrowPathIcon,
   SparklesIcon,
@@ -672,11 +673,14 @@ function CampaignsPageContent() {
             <label className="mt-5 block text-sm font-medium text-slate-700">
               New send date &amp; time
             </label>
-            <input
-              type="datetime-local"
+            <DateTimePicker
+              mode="datetime"
+              disablePast
+              clearable={false}
+              className="mt-1.5"
+              placeholder="Select date & time"
               value={resendDate}
-              onChange={(e) => setResendDate(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              onChange={setResendDate}
             />
 
             <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">

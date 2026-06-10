@@ -1,64 +1,72 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowPathIcon,
-  CubeIcon,
-  ExclamationTriangleIcon,
+  CalendarDaysIcon,
   RssIcon,
 } from "@heroicons/react/24/outline";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { SectionHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton, SkeletonStat } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/dialog";
 import {
   defaultSourceForm,
   parseTemplateOverrides,
   type CampaignPlan,
-  type Product,
   type ProductSource,
   type SourceFormState,
 } from "./product-catalog-types";
 import { ProductSourceForm } from "./ProductSourceForm";
 import { ProductSourceList } from "./ProductSourceList";
+import {
+  ProductSourceEditModal,
+  type SourceUpdatePayload,
+} from "./ProductSourceEditModal";
 import { MonthlyPlansSection } from "./MonthlyPlansSection";
-import { ProductsGrid } from "./ProductsGrid";
 
-interface ProductCatalogSectionProps {
+interface PlanningSectionProps {
   clientId: string;
 }
 
-export default function ProductCatalogSection({
-  clientId,
-}: ProductCatalogSectionProps) {
+/**
+ * Sync sources + monthly planning. Browsing the resulting catalog lives in the
+ * separate Products tab; this tab is about getting products in and scheduling
+ * them across the month.
+ */
+export default function PlanningSection({ clientId }: PlanningSectionProps) {
   const toast = useToast();
+  const router = useRouter();
   const { confirm, confirmDialog } = useConfirm();
 
+  const openPlanner = useCallback(
+    (target?: { year: number; month: number }) => {
+      const query = target ? `?year=${target.year}&month=${target.month}` : "";
+      router.push(`/clients/${clientId}/planner${query}`);
+    },
+    [clientId, router]
+  );
+
   const [sources, setSources] = useState<ProductSource[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<CampaignPlan[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sourceForm, setSourceForm] = useState<SourceFormState>(defaultSourceForm);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [creatingSource, setCreatingSource] = useState(false);
   const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
   const [removingSourceId, setRemovingSourceId] = useState<string | null>(null);
-  const [removingProductId, setRemovingProductId] = useState<string | null>(
+  const [editingSource, setEditingSource] = useState<ProductSource | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [creatingPlan, setCreatingPlan] = useState<"MANUAL" | "ASSISTED" | null>(
     null
   );
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [bulkRemovingProducts, setBulkRemovingProducts] = useState(false);
-  const [creatingPlan, setCreatingPlan] = useState<
-    "MANUAL" | "ASSISTED" | null
-  >(null);
   const [approvingPlanId, setApprovingPlanId] = useState<string | null>(null);
 
   const loadSources = useCallback(async () => {
@@ -67,24 +75,6 @@ export default function ProductCatalogSection({
     if (!response.ok)
       throw new Error(payload?.error || "Failed to load product sources");
     setSources(Array.isArray(payload.sources) ? payload.sources : []);
-  }, [clientId]);
-
-  const loadProducts = useCallback(async () => {
-    const response = await fetch(`/api/clients/${clientId}/products?limit=30`);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok)
-      throw new Error(payload?.error || "Failed to load products");
-    const nextProducts = Array.isArray(payload.products) ? payload.products : [];
-    setProducts(nextProducts);
-    setSelectedProductIds((prev) => {
-      const visibleIds = new Set(
-        nextProducts.map((product: Product) => product.id)
-      );
-      return new Set(
-        Array.from(prev).filter((productId) => visibleIds.has(productId))
-      );
-    });
-    setCounts(payload.counts ?? {});
   }, [clientId]);
 
   const loadPlans = useCallback(async () => {
@@ -99,25 +89,20 @@ export default function ProductCatalogSection({
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([loadSources(), loadProducts(), loadPlans()]);
+      await Promise.all([loadSources(), loadPlans()]);
     } catch (error) {
       const text =
-        error instanceof Error
-          ? error.message
-          : "Unable to load product catalog";
+        error instanceof Error ? error.message : "Unable to load planning data";
       setLoadError(text);
-      toast.error("Couldn't load product catalog", text);
+      toast.error("Couldn't load planning", text);
     } finally {
       setLoading(false);
     }
-  }, [loadPlans, loadProducts, loadSources, toast]);
+  }, [loadPlans, loadSources, toast]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
-
-  const activeProductCount = counts.ACTIVE ?? 0;
-  const unavailableCount = counts.POSSIBLY_UNAVAILABLE ?? 0;
 
   const latestRun = useMemo(() => {
     return sources
@@ -127,13 +112,6 @@ export default function ProductCatalogSection({
           new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
       )[0];
   }, [sources]);
-  const visibleProductIds = useMemo(
-    () => products.map((product) => product.id),
-    [products]
-  );
-  const allVisibleProductsSelected =
-    visibleProductIds.length > 0 &&
-    visibleProductIds.every((productId) => selectedProductIds.has(productId));
 
   const createSource = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -180,9 +158,7 @@ export default function ProductCatalogSection({
     try {
       const response = await fetch(
         `/api/clients/${clientId}/product-sources/${sourceId}/sync`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Product sync failed");
@@ -192,7 +168,7 @@ export default function ProductCatalogSection({
       );
       await loadSources();
       window.setTimeout(() => {
-        Promise.all([loadSources(), loadProducts()]).catch(() => null);
+        loadSources().catch(() => null);
       }, 2500);
     } catch (error) {
       toast.error(
@@ -205,11 +181,63 @@ export default function ProductCatalogSection({
     }
   };
 
+  const syncAll = async () => {
+    setSyncingAll(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/product-sources/sync-all`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Failed to start sync");
+      toast.success(
+        "Syncing all sources",
+        `${payload.sourceCount ?? "All"} sources queued — this runs in the background.`
+      );
+      await loadSources();
+      window.setTimeout(() => {
+        loadSources().catch(() => null);
+      }, 3000);
+    } catch (error) {
+      toast.error(
+        "Couldn't start sync",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  const saveSource = async (sourceId: string, payload: SourceUpdatePayload) => {
+    setSavingEdit(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/product-sources/${sourceId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Failed to save source");
+      toast.success("Source updated");
+      setEditingSource(null);
+      await loadSources();
+    } catch (error) {
+      toast.error(
+        "Couldn't save source",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const removeSource = async (sourceId: string) => {
     const confirmed = await confirm({
       title: "Remove product source?",
-      description:
-        "Existing synced products will stay in the catalog.",
+      description: "Existing synced products will stay in the catalog.",
       confirmLabel: "Remove source",
       confirmVariant: "danger",
     });
@@ -219,9 +247,7 @@ export default function ProductCatalogSection({
     try {
       const response = await fetch(
         `/api/clients/${clientId}/product-sources/${sourceId}`,
-        {
-          method: "DELETE",
-        }
+        { method: "DELETE" }
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
@@ -235,98 +261,6 @@ export default function ProductCatalogSection({
       );
     } finally {
       setRemovingSourceId(null);
-    }
-  };
-
-  const removeProduct = async (productId: string) => {
-    const confirmed = await confirm({
-      title: "Remove product from catalog?",
-      description:
-        "Campaign history and snapshots will stay untouched.",
-      confirmLabel: "Remove product",
-      confirmVariant: "danger",
-    });
-    if (!confirmed) return;
-
-    setRemovingProductId(productId);
-    try {
-      const response = await fetch(
-        `/api/clients/${clientId}/products/${productId}`,
-        {
-          method: "DELETE",
-        }
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(payload?.error || "Failed to remove product");
-      toast.success("Product removed from catalog");
-      await loadProducts();
-    } catch (error) {
-      toast.error(
-        "Couldn't remove product",
-        error instanceof Error ? error.message : undefined
-      );
-    } finally {
-      setRemovingProductId(null);
-    }
-  };
-
-  const toggleProductSelection = (productId: string) => {
-    setSelectedProductIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-      } else {
-        next.add(productId);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelectAllVisibleProducts = () => {
-    setSelectedProductIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleProductsSelected) {
-        visibleProductIds.forEach((productId) => next.delete(productId));
-      } else {
-        visibleProductIds.forEach((productId) => next.add(productId));
-      }
-      return next;
-    });
-  };
-
-  const removeSelectedProducts = async (ids: string[]) => {
-    if (ids.length === 0) return;
-    const confirmed = await confirm({
-      title: `Remove ${ids.length} product${ids.length === 1 ? "" : "s"}?`,
-      description: "Removed products are archived, not permanently deleted.",
-      confirmLabel: "Remove",
-      confirmVariant: "danger",
-    });
-    if (!confirmed) return;
-
-    setBulkRemovingProducts(true);
-    try {
-      const response = await fetch(`/api/clients/${clientId}/products`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "archive", productIds: ids }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(payload?.error || "Failed to remove products");
-      setSelectedProductIds(new Set());
-      toast.success(
-        `${payload?.count ?? ids.length} products removed from catalog`
-      );
-      await loadProducts();
-    } catch (error) {
-      toast.error(
-        "Couldn't remove products",
-        error instanceof Error ? error.message : undefined
-      );
-    } finally {
-      setBulkRemovingProducts(false);
     }
   };
 
@@ -367,9 +301,7 @@ export default function ProductCatalogSection({
     try {
       const response = await fetch(
         `/api/clients/${clientId}/campaign-plans/${planId}/approve`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
@@ -390,7 +322,7 @@ export default function ProductCatalogSection({
     <Card>
       <div className="space-y-6 p-5 sm:p-6">
         <SectionHeader
-          title="Products & Monthly Planning"
+          title="Sources & Monthly Planning"
           description="Sync product URLs into Templaito, then plan each month manually or with assisted suggestions."
           actions={
             <Button
@@ -406,8 +338,8 @@ export default function ProductCatalogSection({
 
         {loading ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
                 <SkeletonStat key={index} />
               ))}
             </div>
@@ -420,7 +352,7 @@ export default function ProductCatalogSection({
         ) : loadError ? (
           <EmptyState
             icon={<ArrowPathIcon className="h-6 w-6" />}
-            title="Couldn't load product catalog"
+            title="Couldn't load planning"
             description={loadError}
             action={
               <Button
@@ -434,24 +366,18 @@ export default function ProductCatalogSection({
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-              <StatCard
-                label="Active products"
-                value={activeProductCount}
-                accent="success"
-                icon={<CubeIcon className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Needs review"
-                value={unavailableCount}
-                accent="warning"
-                icon={<ExclamationTriangleIcon className="h-4 w-4" />}
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <StatCard
                 label="Sources"
                 value={sources.length}
                 accent="brand"
                 icon={<RssIcon className="h-4 w-4" />}
+              />
+              <StatCard
+                label="Monthly plans"
+                value={plans.length}
+                accent="info"
+                icon={<CalendarDaysIcon className="h-4 w-4" />}
               />
               <StatCard
                 label="Latest sync"
@@ -491,7 +417,10 @@ export default function ProductCatalogSection({
               sources={sources}
               syncingSourceId={syncingSourceId}
               removingSourceId={removingSourceId}
+              syncingAll={syncingAll}
               onSync={syncSource}
+              onSyncAll={syncAll}
+              onEdit={setEditingSource}
               onRemove={removeSource}
             />
 
@@ -502,26 +431,20 @@ export default function ProductCatalogSection({
                 approvingPlanId={approvingPlanId}
                 onCreatePlan={createPlan}
                 onApprovePlan={approvePlan}
-              />
-            </div>
-
-            <div className="border-t border-line pt-6">
-              <ProductsGrid
-                products={products}
-                selectedProductIds={selectedProductIds}
-                allVisibleProductsSelected={allVisibleProductsSelected}
-                visibleProductIds={visibleProductIds}
-                bulkRemoving={bulkRemovingProducts}
-                removingProductId={removingProductId}
-                onToggleSelect={toggleProductSelection}
-                onToggleSelectAll={toggleSelectAllVisibleProducts}
-                onRemoveSelected={removeSelectedProducts}
-                onRemoveProduct={removeProduct}
+                onOpenPlanner={openPlanner}
               />
             </div>
           </>
         )}
       </div>
+
+      <ProductSourceEditModal
+        open={editingSource !== null}
+        source={editingSource}
+        saving={savingEdit}
+        onClose={() => setEditingSource(null)}
+        onSave={saveSource}
+      />
       {confirmDialog}
     </Card>
   );

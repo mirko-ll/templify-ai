@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronDownIcon, CheckIcon } from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDownIcon,
+  CheckIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
 
 interface Option {
@@ -26,6 +30,8 @@ interface CustomSelectProps {
   disabled?: boolean;
   dropdownPlacement?: "above" | "below";
   size?: "sm" | "md";
+  /** Show a search box in the dropdown. Defaults to auto (on when many options). */
+  searchable?: boolean;
 }
 
 export default function CustomSelect({
@@ -37,11 +43,21 @@ export default function CustomSelect({
   disabled = false,
   dropdownPlacement = "below",
   size = "md",
+  searchable,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find((option) => option.value === value);
+  const enableSearch = searchable ?? options.length > 6;
+
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!enableSearch || !q) return options;
+    return options.filter((option) => option.label.toLowerCase().includes(q));
+  }, [options, query, enableSearch]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -62,6 +78,18 @@ export default function CustomSelect({
       document.removeEventListener("keydown", handleEscape);
     };
   }, []);
+
+  // Reset the query on close; focus the search box on open.
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+      return;
+    }
+    if (enableSearch) {
+      const timer = setTimeout(() => searchInputRef.current?.focus(), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, enableSearch]);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
@@ -110,33 +138,62 @@ export default function CustomSelect({
             dropdownPlacement === "above" ? "bottom-full mb-2" : "top-full mt-2"
           )}
         >
-          <div className="animate-rise max-h-64 min-w-full overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-overlay">
-            {options.map((option) => {
-              const isSelected = value === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => handleSelect(option.value)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none",
-                    isSelected
-                      ? "bg-brand-50 font-medium text-brand-700"
-                      : "text-body hover:bg-surface-muted hover:text-ink"
-                  )}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    {option.emoji && <span>{option.emoji}</span>}
-                    <span className="truncate">{option.label}</span>
-                  </span>
-                  {isSelected && (
-                    <CheckIcon className="h-4 w-4 flex-shrink-0 text-brand-600" />
-                  )}
-                </button>
-              );
-            })}
+          <div className="animate-rise min-w-full rounded-xl border border-line bg-surface shadow-overlay">
+            {enableSearch && (
+              <div className="flex items-center gap-2 border-b border-line px-3">
+                <MagnifyingGlassIcon className="h-4 w-4 flex-shrink-0 text-muted" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (filteredOptions.length > 0) {
+                        handleSelect(filteredOptions[0].value);
+                      }
+                    }
+                  }}
+                  placeholder="Search…"
+                  className="h-9 w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
+                />
+              </div>
+            )}
+            <div className="max-h-60 overflow-y-auto p-1">
+              {filteredOptions.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-muted">
+                  No matches
+                </p>
+              ) : (
+                filteredOptions.map((option) => {
+                  const isSelected = value === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => handleSelect(option.value)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none",
+                        isSelected
+                          ? "bg-brand-50 font-medium text-brand-700"
+                          : "text-body hover:bg-surface-muted hover:text-ink"
+                      )}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        {option.emoji && <span>{option.emoji}</span>}
+                        <span className="truncate">{option.label}</span>
+                      </span>
+                      {isSelected && (
+                        <CheckIcon className="h-4 w-4 flex-shrink-0 text-brand-600" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
