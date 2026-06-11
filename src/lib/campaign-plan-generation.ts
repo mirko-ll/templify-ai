@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { callTemplaitoBackend } from "@/lib/templaito-backend";
 import { pickCanonicalListing } from "@/lib/product-grouping";
+import { buildCampaignUrl, type CampaignUrlRule } from "@/lib/product-links";
 
 /**
  * Background worker that turns a monthly campaign plan's items into scheduled
@@ -22,6 +23,13 @@ const APP_URL =
 
 const CONCURRENCY = 2;
 
+/**
+ * Preferred base country for generation. The first country sent to /api/scrape
+ * becomes the base: the AI writes from its product page, and its title/subject
+ * become the campaign's name/nickname shown in the Campaigns panel.
+ */
+const PREFERRED_BASE_COUNTRY = "SI";
+
 type PlanItem = Awaited<ReturnType<typeof loadQueuedItems>>[number];
 
 async function loadQueuedItems(planId: string) {
@@ -36,6 +44,9 @@ interface SnapshotListing {
   url?: string | null;
   campaignUrl?: string | null;
   slug?: string | null;
+  title?: string | null;
+  normalizedTitle?: string | null;
+  campaignUrlRule?: CampaignUrlRule | null;
 }
 
 function snapshotListings(snapshot: unknown): SnapshotListing[] {
@@ -58,6 +69,16 @@ function snapshotTitle(snapshot: unknown): string | undefined {
   return undefined;
 }
 
+/** Campaign id a resend day clones, if this is one (set by the day editor's resend form). */
+function resendSourceId(snapshot: unknown): string | null {
+  if (snapshot && typeof snapshot === "object") {
+    const source = (snapshot as { resend?: { sourceCampaignId?: unknown } }).resend
+      ?.sourceCampaignId;
+    if (typeof source === "string" && source.trim()) return source;
+  }
+  return null;
+}
+
 async function setItem(
   itemId: string,
   status: "GENERATING" | "SCHEDULED" | "FAILED",
@@ -66,6 +87,52 @@ async function setItem(
   await prisma.campaignPlanItem.update({
     where: { id: itemId },
     data: { status, errorMessage: errorMessage ?? null },
+  });
+}
+
+/**
+ * Resend day: the backend clones the source campaign's prepared per-country
+ * emails (same content, same mailing lists) for the new send date — no
+ * scraping or AI generation involved, so the item goes straight to SCHEDULED.
+ */
+async function scheduleResendItem(item: PlanItem, sourceCampaignId: string) {
+  if (!item.sendDate) {
+    await setItem(item.id, "FAILED", "Missing send date.");
+    return;
+  }
+
+  const source = await prisma.campaign.findUnique({
+    where: { id: sourceCampaignId },
+    select: {
+      id: true,
+      countryTargets: {
+        where: { preparedHtml: { not: null } },
+        select: { id: true },
+      },
+    },
+  });
+  if (!source || source.countryTargets.length === 0) {
+    await setItem(
+      item.id,
+      "FAILED",
+      "The original campaign no longer has prepared content to resend. Pick a different campaign for this day."
+    );
+    return;
+  }
+
+  const resent = await callTemplaitoBackend<{ id?: string | null }>({
+    path: `/integrations/squalomail/campaigns/${sourceCampaignId}/resend`,
+    method: "POST",
+    body: JSON.stringify({ sendDate: item.sendDate.toISOString() }),
+  });
+
+  await prisma.campaignPlanItem.update({
+    where: { id: item.id },
+    data: {
+      status: "SCHEDULED",
+      errorMessage: null,
+      campaignId: resent?.id ?? null,
+    },
   });
 }
 
@@ -167,6 +234,14 @@ export async function runPlanGeneration(planId: string): Promise<void> {
       try {
         await setItem(item.id, "GENERATING");
 
+        // Resend days clone an existing campaign — skip the whole generation
+        // pipeline (template, scrape, schedule) below.
+        const sourceCampaignId = resendSourceId(item.productSnapshot);
+        if (sourceCampaignId) {
+          await scheduleResendItem(item, sourceCampaignId);
+          return;
+        }
+
         const prompt =
           (item.templateId && promptById.get(item.templateId)) ||
           (defaultTemplateId && promptById.get(defaultTemplateId)) ||
@@ -206,10 +281,48 @@ export async function runPlanGeneration(planId: string): Promise<void> {
             (listingsByCountry[code] ||= []).push(listing);
           }
         }
+        // A per-day price override is applied by rebuilding the campaign link —
+        // landing pages read the price from the URL, so the scraped content
+        // (email HTML and the {price} variable) picks it up automatically.
+        const priceOverride =
+          typeof item.priceOverride === "string" && item.priceOverride.trim()
+            ? item.priceOverride.trim()
+            : null;
+        // SI first: the scrape treats the first country as the base, so the
+        // generated copy (and the campaign's display name) is Slovenian
+        // whenever the day sends to SI.
+        const orderedCodes = Object.keys(listingsByCountry).sort((a, b) =>
+          a === PREFERRED_BASE_COUNTRY
+            ? -1
+            : b === PREFERRED_BASE_COUNTRY
+              ? 1
+              : a.localeCompare(b)
+        );
         const countryUrls: Record<string, string[]> = {};
-        for (const [code, listings] of Object.entries(listingsByCountry)) {
+        for (const code of orderedCodes) {
+          const listings = listingsByCountry[code];
           const chosen = pickCanonicalListing(listings);
-          const url = chosen.campaignUrl || chosen.url;
+          let url = chosen.campaignUrl || chosen.url;
+          if (priceOverride && chosen.url && chosen.campaignUrlRule) {
+            try {
+              url = buildCampaignUrl({
+                product: {
+                  title:
+                    chosen.title || snapshotTitle(item.productSnapshot) || "",
+                  normalizedTitle: chosen.normalizedTitle ?? null,
+                },
+                listing: {
+                  url: chosen.url,
+                  slug: chosen.slug,
+                  countryCode: chosen.countryCode,
+                },
+                rule: chosen.campaignUrlRule,
+                price: priceOverride,
+              });
+            } catch {
+              // Malformed listing URL — keep the prebuilt campaign link.
+            }
+          }
           if (url) countryUrls[code] = [url];
         }
         const primaryUrl = Object.values(countryUrls)[0]?.[0];
@@ -304,7 +417,7 @@ export async function runPlanGeneration(planId: string): Promise<void> {
         const hasOverrides = Object.keys(mailingListOverrides).length > 0;
 
         // 2. Schedule the campaign for this day (backend localizes/translates/queues).
-        await callTemplaitoBackend({
+        const scheduled = await callTemplaitoBackend<{ campaignId?: string | null }>({
           path: "/integrations/squalomail/campaigns",
           method: "POST",
           body: JSON.stringify({
@@ -326,7 +439,16 @@ export async function runPlanGeneration(planId: string): Promise<void> {
           }),
         });
 
-        await setItem(item.id, "SCHEDULED");
+        // Keep the link to the created campaign so the planner can show the
+        // generated template and detect backend publish failures.
+        await prisma.campaignPlanItem.update({
+          where: { id: item.id },
+          data: {
+            status: "SCHEDULED",
+            errorMessage: null,
+            campaignId: scheduled?.campaignId ?? null,
+          },
+        });
       } catch (error) {
         console.error(`[PLAN-GEN] Item ${item.id} failed`, error);
         await setItem(

@@ -220,6 +220,19 @@ function formatPercentage(value: number) {
   return `${percentage.toFixed(1)}%`;
 }
 
+/** The backend stamps resend clones' names so they're tellable from originals. */
+const RESEND_NAME_SUFFIX = " · resend";
+
+function isResendClone(name: string) {
+  return name.endsWith(RESEND_NAME_SUFFIX);
+}
+
+function stripResendSuffix(name: string) {
+  return isResendClone(name)
+    ? name.slice(0, -RESEND_NAME_SUFFIX.length)
+    : name;
+}
+
 function formatCount(value: number) {
   return new Intl.NumberFormat("sl-SI").format(value ?? 0);
 }
@@ -881,9 +894,20 @@ function CampaignsPageContent() {
                               </svg>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="text-base font-semibold text-slate-900 truncate">
-                                {campaign.subject || campaign.name}
-                              </h3>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <h3 className="text-base font-semibold text-slate-900 truncate">
+                                  {campaign.subject || stripResendSuffix(campaign.name)}
+                                </h3>
+                                {isResendClone(campaign.name) && (
+                                  <span
+                                    className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700"
+                                    title="Resend of an earlier campaign"
+                                  >
+                                    <ArrowPathIcon className="h-3 w-3" />
+                                    Resend
+                                  </span>
+                                )}
+                              </div>
                               {campaign.preheader && (
                                 <p className="text-xs text-slate-500 truncate mt-0.5">
                                   {campaign.preheader}

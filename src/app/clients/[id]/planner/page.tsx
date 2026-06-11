@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
+  ArrowPathIcon,
   CalendarDaysIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -18,6 +19,8 @@ import { useToast } from "@/components/ui/toast";
 import { PlannerDefaultsPanel } from "./PlannerDefaults";
 import { MonthCalendar } from "./MonthCalendar";
 import { DayEditor } from "./DayEditor";
+import { CampaignPreviewModal } from "./CampaignPreviewModal";
+import { TopSellersPanel } from "./TopSellersPanel";
 import {
   DEFAULT_PLANNER_DEFAULTS,
   assignmentId,
@@ -31,12 +34,16 @@ import {
   type DayAssignment,
   type ItemStatus,
   type MailingList,
+  type PerformanceData,
+  type PerformanceEntry,
   type PlannerDefaults,
   type ProductGroup,
   type PromptOption,
+  type ResendSource,
 } from "./planner-types";
 
 interface PlanItemResponse {
+  id: string;
   sendDate: string | null;
   status: ItemStatus;
   countryCodes: string[] | null;
@@ -47,7 +54,9 @@ interface PlanItemResponse {
   selectedImageUrl: string | null;
   priceOverride: string | null;
   errorMessage: string | null;
-  productSnapshot: ProductGroup | null;
+  campaignId: string | null;
+  /** Synthesized group for resend days carries the `resend` marker. */
+  productSnapshot: (ProductGroup & { resend?: ResendSource | null }) | null;
 }
 
 interface PlanResponse {
@@ -55,6 +64,15 @@ interface PlanResponse {
   strategy: { defaults?: Partial<PlannerDefaults> } | null;
   items: PlanItemResponse[];
 }
+
+interface PlanListEntry extends PlanResponse {
+  mode: "MANUAL" | "ASSISTED";
+  status: string;
+  updatedAt: string;
+}
+
+/** Statuses a month's manual plan can be reopened in. */
+const LIVE_STATUSES = new Set(["DRAFT", "APPROVED", "SCHEDULED", "COMPLETED"]);
 
 /**
  * Flatten plan items into per-product assignments. Each day may hold several
@@ -73,10 +91,11 @@ function buildAssignments(
     const date = new Date(item.sendDate);
     const dayKey = localDayKey(date);
     const timeKey = localTimeKey(date);
+    const { resend, ...group } = snapshot;
     out.push({
       id: assignmentId(dayKey, snapshot.key),
       dayKey,
-      group: snapshot,
+      group,
       countryCodes: Array.isArray(item.countryCodes) ? item.countryCodes : null,
       templateId: item.templateId,
       subject: item.subject,
@@ -87,9 +106,22 @@ function buildAssignments(
       priceOverride: item.priceOverride,
       status: item.status,
       errorMessage: item.errorMessage,
+      campaignId: item.campaignId,
+      itemId: item.id,
+      resend: resend ?? null,
     });
   }
   return out;
+}
+
+/** Short day label for the failed-items list, e.g. "Tue 17 Jun". */
+function formatDayLabel(dayKey: string): string {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(y, (m || 1) - 1, d || 1));
 }
 
 export default function PlannerPage() {
@@ -99,15 +131,16 @@ export default function PlannerPage() {
 
   const todayKey = useMemo(() => localDayKey(new Date()), []);
   const now = useMemo(() => new Date(), []);
+  // useSearchParams (not window.location) — after a client-side navigation the
+  // location can still hold the previous URL during the first render, which
+  // silently dropped the ?year/&month from the "Open" button.
+  const searchParams = useSearchParams();
   const initialDate = useMemo(() => {
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      const y = Number(sp.get("year"));
-      const m = Number(sp.get("month"));
-      if (y >= 2020 && m >= 1 && m <= 12) return { year: y, month: m };
-    }
+    const y = Number(searchParams?.get("year"));
+    const m = Number(searchParams?.get("month"));
+    if (y >= 2020 && m >= 1 && m <= 12) return { year: y, month: m };
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
-  }, [now]);
+  }, [searchParams, now]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,8 +166,15 @@ export default function PlannerPage() {
   const [viewYear, setViewYear] = useState(initialDate.year);
   const [viewMonth, setViewMonth] = useState(initialDate.month);
   const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    campaignId: string;
+    label: string;
+    /** Title prefix — "Original campaign" when previewing a resend's source. */
+    heading?: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [performance, setPerformance] = useState<PerformanceData | null>(null);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -152,6 +192,76 @@ export default function PlannerPage() {
 
   const busy = counts.busy > 0;
 
+  const failedAssignments = useMemo(
+    () =>
+      assignments
+        .filter((assignment) => assignment.status === "FAILED")
+        .sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
+    [assignments]
+  );
+
+  /** Latest imported sales month, reshaped for quick lookups while planning. */
+  const perfMaps = useMemo(() => {
+    const byGroupKey = new Map<string, PerformanceEntry>();
+    const ranks = new Map<string, number>();
+    if (performance?.entries) {
+      for (const entry of performance.entries) {
+        if (entry.groupKey && !byGroupKey.has(entry.groupKey)) {
+          byGroupKey.set(entry.groupKey, entry);
+        }
+      }
+      // "Top seller" rank = position by quantity sold (the house definition).
+      [...performance.entries]
+        .sort((a, b) => b.quantity - a.quantity)
+        .forEach((entry, index) => {
+          if (entry.groupKey && !ranks.has(entry.groupKey)) {
+            ranks.set(entry.groupKey, index + 1);
+          }
+        });
+    }
+    const label = performance?.report
+      ? new Intl.DateTimeFormat("en-GB", { month: "short" }).format(
+          new Date(performance.report.year, performance.report.month - 1, 1)
+        )
+      : null;
+    return { byGroupKey, ranks, label };
+  }, [performance]);
+
+  /** Product group keys already planned in the month being viewed. */
+  const plannedKeys = useMemo(
+    () =>
+      new Set(
+        assignments
+          .filter((assignment) => !assignment.resend)
+          .map((assignment) => assignment.group.key)
+      ),
+    [assignments]
+  );
+
+  const refreshPerformance = useCallback(async () => {
+    if (!clientId) return;
+    try {
+      const response = await fetch(`/api/clients/${clientId}/product-performance`);
+      if (!response.ok) return;
+      const payload = (await response.json()) as PerformanceData;
+      setPerformance(payload);
+    } catch {
+      // Insights are decoration — the planner works without them.
+    }
+  }, [clientId]);
+
+  /** sourceCampaignId → days of this month already re-sending it (picker hints). */
+  const resendUsage = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const assignment of assignments) {
+      if (!assignment.resend) continue;
+      const days = map.get(assignment.resend.sourceCampaignId) ?? [];
+      days.push(assignment.dayKey);
+      map.set(assignment.resend.sourceCampaignId, days.sort());
+    }
+    return map;
+  }, [assignments]);
+
   /** Persist current state (defaults + items) to the plan. */
   const persist = useCallback(
     async (
@@ -167,8 +277,11 @@ export default function PlannerPage() {
           .filter((assignment) => !isLocked(assignment.status))
           .map((assignment) => {
             const available = availableCountries(assignment.group, eligible);
-            const countryCodes =
-              assignment.countryCodes && assignment.countryCodes.length > 0
+            // Resends go to the original campaign's countries/lists — the
+            // eligible-country filter only applies to fresh generations.
+            const countryCodes = assignment.resend
+              ? assignment.group.countries
+              : assignment.countryCodes && assignment.countryCodes.length > 0
                 ? assignment.countryCodes.filter((code) => available.includes(code))
                 : available;
             return {
@@ -178,7 +291,9 @@ export default function PlannerPage() {
               ),
               groupKey: assignment.group.key,
               productId: assignment.group.productIds[0] ?? null,
-              productSnapshot: assignment.group,
+              productSnapshot: assignment.resend
+                ? { ...assignment.group, resend: assignment.resend }
+                : assignment.group,
               countryCodes,
               templateId: assignment.templateId,
               subject: assignment.subject,
@@ -212,19 +327,36 @@ export default function PlannerPage() {
     [clientId, eligible, toast]
   );
 
-  /** Load (or create) the MANUAL draft plan for a month and hydrate state. */
+  /**
+   * Load the month's MANUAL plan and hydrate state. Read-only: just browsing
+   * a month must never create a draft — the plan row is created lazily by
+   * `ensurePlan` on the first real edit.
+   */
   const loadPlan = useCallback(
     async (year: number, month: number) => {
-      const response = await fetch(`/api/clients/${clientId}/campaign-plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "MANUAL", year, month }),
-      });
+      const response = await fetch(
+        `/api/clients/${clientId}/campaign-plans?year=${year}&month=${month}`
+      );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.error || "Failed to load monthly plan");
       }
-      const plan = payload.plan as PlanResponse;
+      const candidates = (
+        Array.isArray(payload.plans) ? (payload.plans as PlanListEntry[]) : []
+      )
+        .filter((p) => p.mode === "MANUAL" && LIVE_STATUSES.has(p.status))
+        .sort(
+          (a, b) =>
+            (b.items.length > 0 ? 1 : 0) - (a.items.length > 0 ? 1 : 0) ||
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      const plan = candidates[0] ?? null;
+      if (!plan) {
+        setPlanId(null);
+        setDefaults(DEFAULT_PLANNER_DEFAULTS);
+        setAssignments([]);
+        return;
+      }
       const planDefaults = {
         ...DEFAULT_PLANNER_DEFAULTS,
         ...(plan.strategy?.defaults ?? {}),
@@ -234,6 +366,39 @@ export default function PlannerPage() {
       setAssignments(buildAssignments(plan.items, planDefaults.sendTime));
     },
     [clientId]
+  );
+
+  /** Create (or reuse) the month's plan row — only called when an edit happens. */
+  const ensurePlan = useCallback(async (): Promise<string> => {
+    if (planId) return planId;
+    const response = await fetch(`/api/clients/${clientId}/campaign-plans`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "MANUAL", year: viewYear, month: viewMonth }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || "Failed to create monthly plan");
+    }
+    const plan = payload.plan as PlanResponse;
+    setPlanId(plan.id);
+    return plan.id;
+  }, [clientId, planId, viewYear, viewMonth]);
+
+  /** Create the plan if needed, then persist the given state. */
+  const saveAll = useCallback(
+    async (list: DayAssignment[], currentDefaults: PlannerDefaults) => {
+      try {
+        const id = await ensurePlan();
+        await persist(id, list, currentDefaults);
+      } catch (err) {
+        toast.error(
+          "Couldn't save the plan",
+          err instanceof Error ? err.message : undefined
+        );
+      }
+    },
+    [ensurePlan, persist, toast]
   );
 
   /** Refetch just the plan items (for generation progress polling). */
@@ -313,7 +478,10 @@ export default function PlannerPage() {
           );
         }
 
-        await loadPlan(initialDate.year, initialDate.month);
+        await Promise.all([
+          loadPlan(initialDate.year, initialDate.month),
+          refreshPerformance(),
+        ]);
       } catch (err) {
         if (!cancelled)
           setError(
@@ -341,10 +509,14 @@ export default function PlannerPage() {
 
   const changeMonth = async (delta: number) => {
     const base = new Date(viewYear, viewMonth - 1 + delta, 1);
-    setViewYear(base.getFullYear());
-    setViewMonth(base.getMonth() + 1);
+    const year = base.getFullYear();
+    const month = base.getMonth() + 1;
+    setViewYear(year);
+    setViewMonth(month);
+    // Keep the URL refreshable/shareable (replaceState skips a router render).
+    window.history.replaceState(null, "", `?year=${year}&month=${month}`);
     try {
-      await loadPlan(base.getFullYear(), base.getMonth() + 1);
+      await loadPlan(year, month);
     } catch (err) {
       toast.error(
         "Couldn't load that month",
@@ -360,7 +532,7 @@ export default function PlannerPage() {
       ...dayItems,
     ];
     setAssignments(next);
-    if (planId) void persist(planId, next, defaults);
+    void saveAll(next, defaults);
   };
 
   const handleDefaultsChange = (
@@ -373,22 +545,22 @@ export default function PlannerPage() {
     // Discrete picks (mailing lists, reset) save right away so they stick even
     // if the user leaves immediately; text fields debounce to avoid churn.
     if (immediate) {
-      if (planId) void persist(planId, assignments, next);
+      void saveAll(assignments, next);
       return;
     }
     saveTimer.current = setTimeout(() => {
-      if (planId) void persist(planId, assignments, next);
+      void saveAll(assignments, next);
     }, 700);
   };
 
   const handleGenerate = async (onlyFailed = false) => {
-    if (!planId) return;
     setGenerating(true);
     try {
-      // Make sure the latest edits are saved before generating.
-      await persist(planId, assignments, defaults);
+      // Make sure the plan exists and the latest edits are saved first.
+      const id = await ensurePlan();
+      await persist(id, assignments, defaults);
       const response = await fetch(
-        `/api/clients/${clientId}/campaign-plans/${planId}/generate${
+        `/api/clients/${clientId}/campaign-plans/${id}/generate${
           onlyFailed ? "?only=failed" : ""
         }`,
         { method: "POST" }
@@ -406,6 +578,31 @@ export default function PlannerPage() {
       setGenerating(false);
       toast.error(
         "Couldn't start generation",
+        err instanceof Error ? err.message : undefined
+      );
+    }
+  };
+
+  /** Cancel a scheduled day: deletes the prepared campaign, item back to PLANNED. */
+  const handleUnschedule = async (item: DayAssignment) => {
+    if (!planId || !item.itemId) return;
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/campaign-plans/${planId}/items/${item.itemId}/unschedule`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to unschedule");
+      }
+      toast.success(
+        "Day unscheduled",
+        "The campaign was cancelled — the day is editable again."
+      );
+      await refreshPlanItems();
+    } catch (err) {
+      toast.error(
+        "Couldn't unschedule",
         err instanceof Error ? err.message : undefined
       );
     }
@@ -440,25 +637,16 @@ export default function PlannerPage() {
               Monthly planner
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted">
-              Schedule one or more products per day — each with its own send
-              time — then generate and schedule every campaign at once.
-              Generation runs on the server, so you can close this page once it
-              starts.
+              Schedule one or more products per day — or resend a past campaign
+              — each with its own send time, then generate and schedule every
+              campaign at once. Generation runs on the server, so you can close
+              this page once it starts.
             </p>
           </div>
           <div className="flex flex-shrink-0 flex-wrap items-center gap-2.5">
             <span className="text-xs text-muted">
               {saving ? "Saving…" : "All changes saved"}
             </span>
-            {counts.failed > 0 && !busy && (
-              <Button
-                variant="secondary"
-                onClick={() => handleGenerate(true)}
-                leftIcon={<ExclamationTriangleIcon className="h-4 w-4" />}
-              >
-                Retry failed ({counts.failed})
-              </Button>
-            )}
             <Button
               onClick={() => handleGenerate(false)}
               disabled={
@@ -518,6 +706,61 @@ export default function PlannerPage() {
           />
         </div>
 
+        {failedAssignments.length > 0 && (
+          <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50/70 p-5 shadow-soft">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-rose-800">
+                  {failedAssignments.length === 1
+                    ? "1 campaign failed to generate"
+                    : `${failedAssignments.length} campaigns failed to generate`}
+                </h2>
+                <p className="mt-0.5 text-xs text-rose-700/80">
+                  Click a day to review or adjust it — regenerating only re-runs
+                  the failed days.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => handleGenerate(true)}
+                disabled={busy || generating}
+                leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+              >
+                Regenerate all failed
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {failedAssignments.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setEditingDay(item.dayKey)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-rose-200 bg-surface p-3 text-left shadow-soft transition-colors hover:border-rose-300 hover:bg-rose-50"
+                >
+                  <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-line bg-surface-muted">
+                    {item.group.bestImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.group.bestImageUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-ink">
+                      {formatDayLabel(item.dayKey)} · {item.group.slug}
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-rose-600">
+                      {item.errorMessage || "Generation failed."}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-6">
           <PlannerDefaultsPanel
             defaults={defaults}
@@ -526,6 +769,14 @@ export default function PlannerPage() {
             mailingLists={mailingLists}
             disabled={busy}
             onChange={handleDefaultsChange}
+          />
+        </div>
+
+        <div className="mt-6">
+          <TopSellersPanel
+            data={performance}
+            plannedKeys={plannedKeys}
+            importHref={`/clients/${clientId}?tab=planning`}
           />
         </div>
 
@@ -562,9 +813,32 @@ export default function PlannerPage() {
         mailingLists={mailingLists}
         defaults={defaults}
         items={editingDayItems}
+        resendUsage={resendUsage}
+        performance={perfMaps.byGroupKey}
+        ranks={perfMaps.ranks}
+        performanceLabel={perfMaps.label}
+        readOnly={editingDay !== null && (editingDay <= todayKey || busy)}
         onClose={() => setEditingDay(null)}
         onChangeDay={handleChangeDay}
+        onPreview={(item) => {
+          if (item.campaignId)
+            setPreview({ campaignId: item.campaignId, label: item.group.slug });
+        }}
+        onPreviewCampaign={(campaignId, label) =>
+          setPreview({ campaignId, label, heading: "Original campaign" })
+        }
+        onUnschedule={handleUnschedule}
       />
+
+      <CampaignPreviewModal
+        open={preview !== null}
+        clientId={clientId}
+        campaignId={preview?.campaignId ?? null}
+        label={preview?.label ?? null}
+        heading={preview?.heading}
+        onClose={() => setPreview(null)}
+      />
+
     </div>
   );
 }

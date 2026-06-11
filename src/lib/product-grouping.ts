@@ -214,10 +214,29 @@ export function groupProducts(
   const groups = new Map<string, ProductGroup>();
   // Score of the member currently chosen as each group's representative.
   const repScore = new Map<string, number>();
+  // Score of the member whose description is currently shown.
+  const descRank = new Map<string, number>();
 
   const scoreOf = (product: GroupableProduct) =>
     (preferred && isFromCountry(product, preferred) ? 2 : 0) +
     (product.bestImageUrl ? 1 : 0);
+
+  // Description is chosen independently of the representative: the text lives
+  // only on the Product row (listings carry no description), and legacy merged
+  // rows hold last-synced-country text. Prefer a member whose row is truly the
+  // preferred country's (its listings are only there), then any member with a
+  // preferred-country listing, then any non-empty description at all.
+  const descScoreOf = (product: GroupableProduct): number => {
+    if (!product.description?.trim()) return 0;
+    if (!preferred) return 1;
+    const countries = new Set(
+      product.listings
+        .map((listing) => (listing.countryCode ?? "").toUpperCase())
+        .filter(Boolean)
+    );
+    if (!countries.has(preferred)) return 1;
+    return countries.size === 1 ? 3 : 2;
+  };
 
   for (const product of products) {
     const slug = extractProductGroupSlug(product.title) || product.title.trim();
@@ -230,7 +249,7 @@ export function groupProducts(
         key,
         slug,
         title: product.title,
-        description: product.description,
+        description: null,
         bestImageUrl: product.bestImageUrl,
         status: product.status,
         updatedAt: product.updatedAt ?? null,
@@ -245,9 +264,14 @@ export function groupProducts(
     } else if (score > (repScore.get(key) ?? -1)) {
       // A better representative (e.g. the SI member) — take its info.
       group.title = product.title;
-      group.description = product.description;
       if (product.bestImageUrl) group.bestImageUrl = product.bestImageUrl;
       repScore.set(key, score);
+    }
+
+    const descScore = descScoreOf(product);
+    if (descScore > (descRank.get(key) ?? 0)) {
+      group.description = product.description;
+      descRank.set(key, descScore);
     }
 
     group.productIds.push(product.id);

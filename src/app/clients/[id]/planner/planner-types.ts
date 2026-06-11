@@ -1,3 +1,5 @@
+import type { CampaignUrlRule } from "@/lib/product-links";
+
 export interface GroupListing {
   id: string;
   productId: string;
@@ -10,6 +12,11 @@ export interface GroupListing {
   salePrice: string | null;
   currency: string | null;
   availability: string;
+  /** Per-country scraped title (present on groups from the grouped API). */
+  title?: string | null;
+  normalizedTitle?: string | null;
+  /** Source's campaign-link rule — lets generation rebuild the URL with a price. */
+  campaignUrlRule?: CampaignUrlRule | null;
 }
 
 export interface ProductGroup {
@@ -61,6 +68,153 @@ export type ItemStatus =
   | "SCHEDULED"
   | "FAILED";
 
+/**
+ * A past campaign re-scheduled as-is for a planned day. The original's
+ * prepared per-country emails (and mailing lists) are cloned at generation
+ * time via the backend resend endpoint — nothing is regenerated.
+ */
+export interface ResendSource {
+  /** Campaign whose prepared content gets cloned. */
+  sourceCampaignId: string;
+  name: string;
+  subject: string | null;
+  productNickname: string | null;
+  imageUrl: string | null;
+  /** When the original went (or goes) out — sentAt, else scheduledAt. */
+  lastSentAt: string | null;
+  countries: string[];
+}
+
+/** Campaign row offered by the resend picker (from /campaigns/resendable). */
+export interface ResendableCampaign {
+  id: string;
+  name: string;
+  /** True when this campaign is itself a resend clone of an earlier one. */
+  isResend: boolean;
+  status: string;
+  subject: string | null;
+  productNickname: string | null;
+  imageUrl: string | null;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  countries: string[];
+  /** SqualoMail newsletter ids — feed the metrics endpoint. */
+  newsletterIds: string[];
+}
+
+/** Per-campaign engagement aggregated from SqualoMail newsletter metrics. */
+export interface ResendStats {
+  sentTotal: number;
+  /** 0–1 fractions, weighted by per-newsletter sends. */
+  openRate: number;
+  clickRate: number;
+}
+
+/** Last imported month's numbers for one product row (see /product-performance). */
+export interface PerformanceEntry {
+  id: string;
+  /** Raw codename from the sheet, e.g. "carfit". */
+  campaignName: string;
+  /** Matched product group key — joins onto ProductGroup.key. Null = not in catalog. */
+  groupKey: string | null;
+  orders: number;
+  quantity: number;
+  revenue: number;
+  uniqueProducts: number;
+  profit: number;
+  productTitle: string | null;
+  imageUrl: string | null;
+  /** Same product in the previously imported month, for trends. */
+  prev: { orders: number; quantity: number; revenue: number; profit: number } | null;
+}
+
+export interface PerformanceReportMeta {
+  id: string;
+  year: number;
+  month: number;
+  fileName?: string | null;
+  rowCount: number;
+  matchedCount: number;
+  createdAt: string;
+}
+
+export interface PerformanceData {
+  reports: PerformanceReportMeta[];
+  report: PerformanceReportMeta | null;
+  previousMonth: { year: number; month: number } | null;
+  entries: PerformanceEntry[];
+}
+
+export type PerformanceMetric = "quantity" | "revenue" | "profit" | "orders";
+
+export const PERFORMANCE_METRICS: Array<{
+  value: PerformanceMetric;
+  label: string;
+}> = [
+  { value: "quantity", label: "Qty sold" },
+  { value: "revenue", label: "Revenue" },
+  { value: "profit", label: "Profit" },
+  { value: "orders", label: "Orders" },
+];
+
+const EUR = new Intl.NumberFormat("sl-SI", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
+const COUNT = new Intl.NumberFormat("sl-SI");
+
+export function formatMetric(metric: PerformanceMetric, value: number): string {
+  return metric === "revenue" || metric === "profit"
+    ? EUR.format(value)
+    : COUNT.format(value);
+}
+
+/** "May 2026" from numeric year/month. */
+export function formatMonth(year: number, month: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, 1));
+}
+
+/** Percent change vs the previous month; null when there's no baseline. */
+export function metricTrend(
+  entry: PerformanceEntry,
+  metric: PerformanceMetric
+): number | null {
+  if (!entry.prev) return null;
+  const before = entry.prev[metric];
+  if (!Number.isFinite(before) || before === 0) return null;
+  return ((entry[metric] - before) / Math.abs(before)) * 100;
+}
+
+const RESEND_KEY_PREFIX = "resend:";
+
+/** Synthetic group key for a resend item — keeps the (day, key) identity machinery working. */
+export function resendGroupKey(campaignId: string): string {
+  return `${RESEND_KEY_PREFIX}${campaignId}`;
+}
+
+/**
+ * Wrap a resend source in a minimal ProductGroup so resend assignments flow
+ * through the same calendar/day-list/persist plumbing as product assignments.
+ */
+export function buildResendGroup(source: ResendSource): ProductGroup {
+  return {
+    key: resendGroupKey(source.sourceCampaignId),
+    slug: source.productNickname || source.subject || source.name,
+    title: source.subject || source.name,
+    description: null,
+    bestImageUrl: source.imageUrl,
+    images: source.imageUrl ? [source.imageUrl] : [],
+    productIds: [],
+    countries: source.countries,
+    listings: [],
+  };
+}
+
 export interface DayAssignment {
   /** Stable identity within the plan: `${dayKey}::${group.key}` (one of each product per day). */
   id: string;
@@ -81,6 +235,12 @@ export interface DayAssignment {
   priceOverride: string | null;
   status: ItemStatus;
   errorMessage?: string | null;
+  /** Campaign created for this day once it's scheduled — powers the preview. */
+  campaignId?: string | null;
+  /** Server row id — present on items loaded from the plan (used to unschedule). */
+  itemId?: string | null;
+  /** Present when this day re-sends an existing campaign instead of generating one. */
+  resend?: ResendSource | null;
 }
 
 export const DEFAULT_PLANNER_DEFAULTS: PlannerDefaults = {

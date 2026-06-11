@@ -1,6 +1,11 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathRoundedSquareIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+} from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
 import {
   formatTime12h,
@@ -38,7 +43,11 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-/** One product line inside a day cell: thumbnail · name · send time. */
+/**
+ * One product line inside a day cell: thumbnail · name · send time. Resends
+ * keep the status accent (state language stays consistent) but get a teal ↻
+ * mark and tint so reruns read at a glance across the month.
+ */
 function DayChip({
   item,
   defaultSendTime,
@@ -46,16 +55,23 @@ function DayChip({
   item: DayAssignment;
   defaultSendTime: string;
 }) {
+  const resend = Boolean(item.resend);
   return (
     <div
       className={cn(
         "relative flex items-center gap-1.5 overflow-hidden rounded-md border border-line bg-surface py-1 pl-2.5 pr-1.5",
         "before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-['']",
         STATUS_ACCENT[item.status],
+        resend && "border-teal-200/80 bg-teal-50/50",
         item.status === "FAILED" && "border-rose-200 bg-rose-50/60"
       )}
     >
-      <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded border border-line bg-surface-muted">
+      <div
+        className={cn(
+          "h-4 w-4 flex-shrink-0 overflow-hidden rounded border bg-surface-muted",
+          resend ? "border-teal-200" : "border-line"
+        )}
+      >
         {item.group.bestImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -65,6 +81,11 @@ function DayChip({
           />
         ) : null}
       </div>
+      {resend && (
+        <span className="flex-shrink-0" title="Resend of a past campaign">
+          <ArrowPathRoundedSquareIcon className="h-3 w-3 text-teal-600" />
+        </span>
+      )}
       <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-ink">
         {item.group.slug}
       </span>
@@ -139,7 +160,10 @@ export function MonthCalendar({
           const { day, dayKey } = cell;
           const items = assignmentsByDay.get(dayKey) ?? [];
           const assignable = dayKey > todayKey;
-          const clickable = assignable && !disabledEditing;
+          const editable = assignable && !disabledEditing;
+          // Past days (and days while generation runs) still open read-only so
+          // scheduled campaigns can be reviewed.
+          const clickable = editable || items.length > 0;
           const visible = items.slice(0, MAX_VISIBLE);
           const overflow = items.length - visible.length;
 
@@ -190,7 +214,7 @@ export function MonthCalendar({
                     </span>
                   )}
                 </div>
-              ) : clickable ? (
+              ) : editable ? (
                 <div className="mt-auto flex items-center gap-1 text-[11px] font-medium text-muted">
                   <PlusIcon className="h-3.5 w-3.5" />
                   Add

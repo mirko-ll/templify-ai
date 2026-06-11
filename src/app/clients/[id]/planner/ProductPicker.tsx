@@ -2,15 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { CheckIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, MagnifyingGlassIcon, TrophyIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
-import { availableCountries, type ProductGroup } from "./planner-types";
+import {
+  availableCountries,
+  formatMetric,
+  type PerformanceEntry,
+  type ProductGroup,
+} from "./planner-types";
 
 interface ProductPickerProps {
   selectedKey: string | null;
   eligible: Set<string>;
   /** Product keys already scheduled this day — shown as disabled. */
   disabledKeys?: Set<string>;
+  /** Last imported month's stats by group key (optional decoration). */
+  performance?: Map<string, PerformanceEntry> | null;
+  /** Group key → leaderboard rank (by quantity) for the same month. */
+  ranks?: Map<string, number> | null;
+  /** Short month label for the stats line, e.g. "May". */
+  performanceLabel?: string | null;
   onSelect: (group: ProductGroup) => void;
 }
 
@@ -26,6 +37,9 @@ export function ProductPicker({
   selectedKey,
   eligible,
   disabledKeys,
+  performance,
+  ranks,
+  performanceLabel,
   onSelect,
 }: ProductPickerProps) {
   const params = useParams<{ id: string }>();
@@ -97,6 +111,8 @@ export function ProductPicker({
             const isSelected = group.key === selectedKey;
             const isDisabled = disabledKeys?.has(group.key) ?? false;
             const countries = availableCountries(group, eligible);
+            const perf = performance?.get(group.key) ?? null;
+            const rank = ranks?.get(group.key) ?? null;
             return (
               <button
                 key={group.key}
@@ -123,7 +139,20 @@ export function ProductPicker({
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{group.slug}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-ink">
+                      {group.slug}
+                    </p>
+                    {rank !== null && rank <= 10 && (
+                      <span
+                        className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                        title={`#${rank} by quantity sold${performanceLabel ? ` in ${performanceLabel}` : ""}`}
+                      >
+                        <TrophyIcon className="h-3 w-3" />
+                        #{rank}
+                      </span>
+                    )}
+                  </div>
                   <p className="truncate text-xs text-muted">{group.title}</p>
                   <p
                     className={cn(
@@ -143,6 +172,14 @@ export function ProductPicker({
                           }: ${countries.join(", ")}`
                         : "No active mailing-list country"}
                   </p>
+                  {perf && (
+                    <p className="mt-0.5 truncate text-[11px] text-muted">
+                      {performanceLabel ? `${performanceLabel}: ` : ""}
+                      {formatMetric("quantity", perf.quantity)} sold ·{" "}
+                      {formatMetric("revenue", perf.revenue)} ·{" "}
+                      {formatMetric("profit", perf.profit)} profit
+                    </p>
+                  )}
                 </div>
                 {isSelected && !isDisabled && (
                   <CheckIcon className="h-5 w-5 flex-shrink-0 text-brand-600" />

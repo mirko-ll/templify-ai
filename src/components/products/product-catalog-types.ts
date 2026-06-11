@@ -65,6 +65,11 @@ export interface CampaignPlan {
   items: Array<{
     id: string;
     type: string;
+    /** Denormalized product data captured at plan time (title is SI-preferred). */
+    productSnapshot?: {
+      title?: string | null;
+      slug?: string | null;
+    } | null;
     product?: {
       id: string;
       title: string;

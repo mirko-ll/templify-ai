@@ -2,12 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  maybeCompletePlan,
+  syncCampaignPlanItems,
+} from "@/lib/campaign-plan-sync";
 import { denyUnlessClientAccess } from "@/lib/client-access";
 
 function monthDefaults() {
   const now = new Date();
   return { month: now.getMonth() + 1, year: now.getFullYear() };
 }
+
+const planInclude = {
+  items: {
+    orderBy: { position: "asc" as const },
+    include: {
+      product: {
+        select: {
+          id: true,
+          title: true,
+          bestImageUrl: true,
+          status: true,
+        },
+      },
+    },
+  },
+};
 
 export async function GET(
   _request: NextRequest,
@@ -42,22 +62,27 @@ export async function GET(
     },
     orderBy: [{ year: "desc" }, { month: "desc" }, { createdAt: "desc" }],
     take: 24,
-    include: {
-      items: {
-        orderBy: { position: "asc" },
-        include: {
-          product: {
-            select: {
-              id: true,
-              title: true,
-              bestImageUrl: true,
-              status: true,
-            },
-          },
-        },
-      },
-    },
+    include: planInclude,
   });
+
+  // Single-month lookups back the planner view, so keep item statuses honest
+  // there (publish failures, dead generation runner). The unfiltered tab list
+  // skips the per-plan queries and only closes out finished months.
+  const syncItems = Boolean(month && year);
+  for (const plan of plans) {
+    if (syncItems && (await syncCampaignPlanItems(plan.items))) {
+      const fresh = await prisma.campaignPlan.findFirst({
+        where: { id: plan.id },
+        include: planInclude,
+      });
+      if (fresh) Object.assign(plan, fresh);
+    }
+    // Close out scheduled plans whose month has passed so the list reflects
+    // reality without anyone having to open the planner.
+    if (await maybeCompletePlan(plan, plan.items)) {
+      plan.status = "COMPLETED";
+    }
+  }
 
   return NextResponse.json({ plans });
 }
@@ -99,31 +124,40 @@ export async function POST(
       ? body.name.trim()
       : `${year}-${String(month).padStart(2, "0")} Campaign Plan`;
 
-  const planInclude = {
-    items: {
-      orderBy: { position: "asc" as const },
-      include: {
-        product: {
-          select: {
-            id: true,
-            title: true,
-            bestImageUrl: true,
-            status: true,
-          },
-        },
-      },
-    },
-  };
-
-  // Manual months are a single editable draft per (client, year, month) — reuse
-  // the existing draft instead of creating duplicates each time the planner opens.
+  // Manual months are a single plan per (client, year, month) — reuse it in
+  // any live status, so a generated (SCHEDULED) month reopens with its items
+  // instead of spawning an empty duplicate draft.
   if (mode === "MANUAL") {
-    const existing = await prisma.campaignPlan.findFirst({
-      where: { clientId: id, year, month, mode: "MANUAL", status: "DRAFT" },
-      orderBy: { createdAt: "desc" },
+    const candidates = await prisma.campaignPlan.findMany({
+      where: {
+        clientId: id,
+        year,
+        month,
+        mode: "MANUAL",
+        status: { in: ["DRAFT", "APPROVED", "SCHEDULED", "COMPLETED"] },
+      },
       include: planInclude,
     });
-    if (existing) {
+    if (candidates.length > 0) {
+      // Months touched before this lookup existed may hold duplicates (a
+      // generated plan plus an empty auto-created draft) — prefer the plan
+      // that has items, then the most recently updated.
+      candidates.sort(
+        (a, b) =>
+          (b.items.length > 0 ? 1 : 0) - (a.items.length > 0 ? 1 : 0) ||
+          b.updatedAt.getTime() - a.updatedAt.getTime()
+      );
+      let existing = candidates[0];
+      if (await syncCampaignPlanItems(existing.items)) {
+        existing =
+          (await prisma.campaignPlan.findUnique({
+            where: { id: existing.id },
+            include: planInclude,
+          })) ?? existing;
+      }
+      if (await maybeCompletePlan(existing, existing.items)) {
+        existing = { ...existing, status: "COMPLETED" };
+      }
       return NextResponse.json({ plan: existing });
     }
   }

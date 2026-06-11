@@ -19,8 +19,14 @@ const config: NextConfig = {
   },
 };
 
-// Push scheduled newsletters to SqualoMail ~2h before sendDate (runs every hour at :00)
-if (process.env.TEMPLAITO_BACKEND_URL && process.env.TEMPLAITO_SERVICE_TOKEN) {
+// Push scheduled newsletters to SqualoMail ~2h before sendDate (runs every hour at :00).
+// Production server only: skipped in development (local testing must never push
+// real campaigns) and during `next build` (which also loads this config).
+if (
+  process.env.NODE_ENV === 'production' &&
+  process.env.TEMPLAITO_BACKEND_URL &&
+  process.env.TEMPLAITO_SERVICE_TOKEN
+) {
   cron.schedule('0 * * * *', async () => {
     try {
       const response = await fetch(

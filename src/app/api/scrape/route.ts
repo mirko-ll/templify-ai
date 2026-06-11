@@ -542,14 +542,24 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json(
-        { error: "Failed to process URL(s). Please try different product URLs." },
+        {
+          error:
+            error instanceof Error && error.message
+              ? error.message
+              : "Failed to process URL(s). Please try different product URLs.",
+        },
         { status: 500 }
       );
     }
   } catch (error) {
     console.error("Scrape failed:", error);
     return NextResponse.json(
-      { error: "Failed to process product" },
+      {
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to process product",
+      },
       { status: 500 }
     );
   }
@@ -560,8 +570,8 @@ async function processSingleUrl(
   url: string,
   templateType: TemplateType
 ): Promise<ProductInfo> {
-  // Validate template type
-  if (!templateType?.name || !templateType?.description) {
+  // Validate template type (description is optional — prompts may not have one)
+  if (!templateType?.name) {
     throw new Error("Invalid template type provided");
   }
 
@@ -745,8 +755,8 @@ async function processMultipleUrls(
   urls: string[],
   templateType: TemplateType
 ): Promise<MultiProductInfo> {
-  // Validate template type
-  if (!templateType?.name || !templateType?.description) {
+  // Validate template type (description is optional — prompts may not have one)
+  if (!templateType?.name) {
     throw new Error("Invalid template type provided");
   }
 
@@ -939,7 +949,7 @@ MANDATORY EMAIL REQUIREMENTS (MUST FOLLOW ALL 12):
 11. Links should always open in a new tab
 
 TEMPLATE-SPECIFIC REQUIREMENTS:
-Template: ${templateType.name} - ${templateType.description}
+Template: ${templateType.name}${templateType.description ? ` - ${templateType.description}` : ""}
 
 SPECIFIC DESIGN INSTRUCTIONS FROM TEMPLATE:
 ${templateType.user}

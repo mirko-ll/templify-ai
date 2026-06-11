@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowPathRoundedSquareIcon,
+  ArrowUturnLeftIcon,
+  EyeIcon,
   PencilSquareIcon,
   PlusIcon,
+  SquaresPlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Modal } from "@/components/ui/dialog";
@@ -12,6 +16,7 @@ import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { cn } from "@/lib/cn";
 import { DayProductForm } from "./DayProductForm";
+import { DayResendForm } from "./DayResendForm";
 import {
   availableCountries,
   isLocked,
@@ -19,6 +24,7 @@ import {
   type DayAssignment,
   type ItemStatus,
   type MailingList,
+  type PerformanceEntry,
   type PlannerDefaults,
   type PromptOption,
 } from "./planner-types";
@@ -33,9 +39,76 @@ interface DayEditorProps {
   defaults: PlannerDefaults;
   /** All products currently scheduled for this day (locked ones included). */
   items: DayAssignment[];
+  /** campaignId → dayKeys across the month that already resend it (picker hints). */
+  resendUsage: Map<string, string[]>;
+  /** Last imported month's stats by group key (decorates the product picker/form). */
+  performance?: Map<string, PerformanceEntry> | null;
+  ranks?: Map<string, number> | null;
+  performanceLabel?: string | null;
+  /** Past days (and generation in progress) are view-only. */
+  readOnly?: boolean;
   onClose: () => void;
   /** Replace every product for the day with the given list. */
   onChangeDay: (dayKey: string, items: DayAssignment[]) => void;
+  /** Open the generated-campaign preview for a scheduled product. */
+  onPreview: (item: DayAssignment) => void;
+  /** Preview an arbitrary campaign — the original email behind a resend. */
+  onPreviewCampaign: (campaignId: string, label: string) => void;
+  /** Cancel a scheduled (not yet pushed) product so the day is editable again. */
+  onUnschedule: (item: DayAssignment) => void;
+}
+
+type AddMode = "product" | "resend";
+
+const ADD_MODES: Array<{
+  value: AddMode;
+  label: string;
+  icon: typeof SquaresPlusIcon;
+}> = [
+  { value: "product", label: "New product", icon: SquaresPlusIcon },
+  { value: "resend", label: "Resend a campaign", icon: ArrowPathRoundedSquareIcon },
+];
+
+/** Segmented "what goes on this day" switch with a sliding active pill. */
+function AddModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: AddMode;
+  onChange: (mode: AddMode) => void;
+}) {
+  return (
+    <div className="relative grid grid-cols-2 gap-1 rounded-xl border border-line bg-surface-muted/70 p-1">
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute bottom-1 left-1 top-1 w-[calc(50%-0.375rem)] rounded-lg border border-line bg-surface shadow-soft transition-transform duration-200 ease-out",
+          mode === "resend" && "translate-x-[calc(100%+0.25rem)]"
+        )}
+      />
+      {ADD_MODES.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onChange(value)}
+          aria-pressed={mode === value}
+          className={cn(
+            "relative z-10 flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors",
+            mode === value ? "text-ink" : "text-muted hover:text-ink"
+          )}
+        >
+          <Icon
+            className={cn(
+              "h-4 w-4 transition-colors",
+              mode === value &&
+                (value === "resend" ? "text-teal-600" : "text-brand-600")
+            )}
+          />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const STATUS_META: Record<ItemStatus, { label: string; variant: BadgeVariant }> = {
@@ -61,21 +134,31 @@ function ProductRow({
   item,
   defaults,
   eligible,
+  readOnly,
   onEditTime,
   onEdit,
   onRemove,
+  onView,
+  onUnschedule,
 }: {
   item: DayAssignment;
   defaults: PlannerDefaults;
   eligible: Set<string>;
+  readOnly: boolean;
   onEditTime: (value: string) => void;
   onEdit: () => void;
   onRemove: () => void;
+  onView: () => void;
+  onUnschedule: () => void;
 }) {
   const locked = isLocked(item.status);
+  const viewable = item.status === "SCHEDULED" && Boolean(item.campaignId);
   const available = availableCountries(item.group, eligible);
-  const sending =
-    item.countryCodes && item.countryCodes.length > 0
+  // A resend goes to the original campaign's countries/lists regardless of the
+  // client's current eligible set.
+  const sending = item.resend
+    ? item.group.countries
+    : item.countryCodes && item.countryCodes.length > 0
       ? item.countryCodes.filter((code) => available.includes(code))
       : available;
   const meta = STATUS_META[item.status];
@@ -87,7 +170,7 @@ function ProductRow({
         item.status === "FAILED" ? "border-rose-200" : "border-line"
       )}
     >
-      <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-surface-muted">
+      <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-surface-muted">
         {item.group.bestImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -95,6 +178,8 @@ function ProductRow({
             alt={item.group.slug}
             className="h-full w-full object-cover"
           />
+        ) : item.resend ? (
+          <ArrowPathRoundedSquareIcon className="absolute inset-0 m-auto h-5 w-5 text-teal-500" />
         ) : null}
       </div>
 
@@ -103,6 +188,12 @@ function ProductRow({
           <p className="truncate text-sm font-semibold text-ink">
             {item.group.slug}
           </p>
+          {item.resend && (
+            <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+              <ArrowPathRoundedSquareIcon className="h-3 w-3" />
+              Resend
+            </span>
+          )}
           <Badge variant={meta.variant} className="flex-shrink-0 text-[10px]">
             {meta.label}
           </Badge>
@@ -123,39 +214,65 @@ function ProductRow({
         <div className="w-36">
           <DateTimePicker
             mode="time"
-            disabled={locked}
+            disabled={locked || readOnly}
             value={item.sendTime ?? defaults.sendTime}
             onChange={onEditTime}
           />
         </div>
-        <button
-          type="button"
-          disabled={locked}
-          onClick={onEdit}
-          aria-label="Edit product"
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors",
-            locked
-              ? "cursor-not-allowed opacity-50"
-              : "hover:bg-surface-muted hover:text-ink"
-          )}
-        >
-          <PencilSquareIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          disabled={locked}
-          onClick={onRemove}
-          aria-label="Remove product"
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors",
-            locked
-              ? "cursor-not-allowed opacity-50"
-              : "hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-          )}
-        >
-          <TrashIcon className="h-4 w-4" />
-        </button>
+        {viewable && (
+          <button
+            type="button"
+            onClick={onView}
+            aria-label="View generated campaign"
+            title="View generated campaign"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
+        )}
+        {viewable && !readOnly && (
+          <button
+            type="button"
+            onClick={onUnschedule}
+            aria-label="Unschedule"
+            title="Unschedule — cancel the campaign and edit this day again"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+          >
+            <ArrowUturnLeftIcon className="h-4 w-4" />
+          </button>
+        )}
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={onEdit}
+              aria-label="Edit product"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors",
+                locked
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-surface-muted hover:text-ink"
+              )}
+            >
+              <PencilSquareIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={onRemove}
+              aria-label="Remove product"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors",
+                locked
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+              )}
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -175,10 +292,19 @@ export function DayEditor({
   mailingLists,
   defaults,
   items,
+  resendUsage,
+  performance,
+  ranks,
+  performanceLabel,
+  readOnly = false,
   onClose,
   onChangeDay,
+  onPreview,
+  onPreviewCampaign,
+  onUnschedule,
 }: DayEditorProps) {
   const [view, setView] = useState<"list" | "form">("list");
+  const [mode, setMode] = useState<AddMode>("product");
   const [editing, setEditing] = useState<DayAssignment | null>(null);
   // Bumped on each add/edit so the form remounts with fresh state.
   const [formSession, setFormSession] = useState(0);
@@ -188,19 +314,22 @@ export function DayEditor({
   // Decide the starting view whenever the modal opens for a (different) day.
   useEffect(() => {
     if (!open) return;
-    setView(itemsRef.current.length > 0 ? "list" : "form");
+    setView(readOnly || itemsRef.current.length > 0 ? "list" : "form");
+    setMode("product");
     setEditing(null);
     setFormSession((n) => n + 1);
-  }, [open, dayKey]);
+  }, [open, dayKey, readOnly]);
 
   const startAdd = () => {
     setEditing(null);
+    setMode("product");
     setFormSession((n) => n + 1);
     setView("form");
   };
 
   const startEdit = (item: DayAssignment) => {
     setEditing(item);
+    setMode(item.resend ? "resend" : "product");
     setFormSession((n) => n + 1);
     setView("form");
   };
@@ -242,34 +371,82 @@ export function DayEditor({
   const usedKeys = new Set(
     items.filter((item) => item.id !== editing?.id).map((item) => item.group.key)
   );
+  const usedCampaignIds = new Set(
+    items
+      .filter((item) => item.resend && item.id !== editing?.id)
+      .map((item) => item.resend!.sourceCampaignId)
+  );
+  // Same-campaign resends on *other* days — surfaced as hints in the picker.
+  const plannedElsewhere = new Map(
+    Array.from(resendUsage.entries())
+      .map(([campaignId, days]) => [
+        campaignId,
+        days.filter((day) => day !== dayKey),
+      ])
+      .filter(([, days]) => days.length > 0) as Array<[string, string[]]>
+  );
+
+  const resendForm = editing ? Boolean(editing.resend) : mode === "resend";
 
   const title =
     view === "form"
-      ? `${editing ? "Edit product" : "Add product"} · ${formatDay(dayKey)}`
-      : `Plan ${formatDay(dayKey)}`;
+      ? `${
+          editing
+            ? resendForm
+              ? "Edit resend"
+              : "Edit product"
+            : "Plan"
+        } · ${formatDay(dayKey)}`
+      : readOnly
+        ? formatDay(dayKey)
+        : `Plan ${formatDay(dayKey)}`;
   const description =
     view === "form"
-      ? "Pick a product and tailor its template, copy, image, send time and lists."
-      : items.length > 0
-        ? `${items.length} ${items.length === 1 ? "product" : "products"} scheduled — each sends at its own time.`
-        : "Schedule one or more products for this day.";
+      ? resendForm
+        ? "Re-schedule a past campaign as-is — same email, same lists, new time."
+        : "Pick a product and tailor its template, copy, image, send time and lists."
+      : readOnly
+        ? `${items.length} ${items.length === 1 ? "product" : "products"} scheduled — view only.`
+        : items.length > 0
+          ? `${items.length} ${items.length === 1 ? "product" : "products"} scheduled — each sends at its own time.`
+          : "Schedule one or more products for this day.";
 
   return (
     <Modal open={open} onClose={onClose} title={title} description={description} size="lg">
       {!dayKey ? null : view === "form" ? (
-        <DayProductForm
-          key={formSession}
-          dayKey={dayKey}
-          prompts={prompts}
-          eligible={eligible}
-          countryOptions={countryOptions}
-          mailingLists={mailingLists}
-          defaults={defaults}
-          initial={editing}
-          usedKeys={usedKeys}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-        />
+        <div className="space-y-5">
+          {!editing && <AddModeToggle mode={mode} onChange={setMode} />}
+          {resendForm ? (
+            <DayResendForm
+              key={`resend-${formSession}`}
+              dayKey={dayKey}
+              defaults={defaults}
+              initial={editing}
+              usedCampaignIds={usedCampaignIds}
+              plannedElsewhere={plannedElsewhere}
+              onPreviewCampaign={onPreviewCampaign}
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+            />
+          ) : (
+            <DayProductForm
+              key={formSession}
+              dayKey={dayKey}
+              prompts={prompts}
+              eligible={eligible}
+              countryOptions={countryOptions}
+              mailingLists={mailingLists}
+              defaults={defaults}
+              initial={editing}
+              usedKeys={usedKeys}
+              performance={performance}
+              ranks={ranks}
+              performanceLabel={performanceLabel}
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+            />
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
@@ -278,20 +455,25 @@ export function DayEditor({
               item={item}
               defaults={defaults}
               eligible={eligible}
+              readOnly={readOnly}
               onEditTime={(value) => handleTimeChange(item, value)}
               onEdit={() => startEdit(item)}
               onRemove={() => handleRemove(item)}
+              onView={() => onPreview(item)}
+              onUnschedule={() => onUnschedule(item)}
             />
           ))}
 
-          <button
-            type="button"
-            onClick={startAdd}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line-strong bg-surface-muted/40 py-3.5 text-sm font-semibold text-muted transition-colors hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Add product
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={startAdd}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line-strong bg-surface-muted/40 py-3.5 text-sm font-semibold text-muted transition-colors hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Add product or resend
+            </button>
+          )}
 
           <div className="flex items-center justify-end pt-1">
             <Button onClick={onClose}>Done</Button>

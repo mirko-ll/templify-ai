@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
@@ -18,10 +19,12 @@ import { VariableHint } from "./VariableHint";
 import {
   assignmentId,
   availableCountries,
+  formatMetric,
   formatTime12h,
   type CountryOption,
   type DayAssignment,
   type MailingList,
+  type PerformanceEntry,
   type PlannerDefaults,
   type ProductGroup,
   type PromptOption,
@@ -38,12 +41,27 @@ interface DayProductFormProps {
   initial: DayAssignment | null;
   /** Product keys already used by the day's other items (disabled in the picker). */
   usedKeys: Set<string>;
+  /** Last imported month's stats by group key (decorates picker + product card). */
+  performance?: Map<string, PerformanceEntry> | null;
+  ranks?: Map<string, number> | null;
+  performanceLabel?: string | null;
   onSubmit: (item: DayAssignment) => void;
   onCancel: () => void;
 }
 
+/** Short "14 May" label for the last-used-price hint. */
+function formatShortDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
 /** Toggle row: "Use shared default" vs a custom value. */
-function DefaultToggle({
+export function DefaultToggle({
   useDefault,
   onToggle,
   defaultLabel,
@@ -79,6 +97,9 @@ export function DayProductForm({
   defaults,
   initial,
   usedKeys,
+  performance,
+  ranks,
+  performanceLabel,
   onSubmit,
   onCancel,
 }: DayProductFormProps) {
@@ -129,7 +150,45 @@ export function DayProductForm({
   const [mailingOverrides, setMailingOverrides] = useState<
     Record<string, string[]>
   >(initial?.mailingListOverrides ?? { ...defaults.mailingListOverrides });
+  const [price, setPrice] = useState(initial?.priceOverride ?? "");
+  const [lastUsed, setLastUsed] = useState<{
+    price: string;
+    usedAt: string | null;
+  } | null>(null);
   const [error, setError] = useState("");
+
+  const routeParams = useParams<{ id: string }>();
+  const clientId = routeParams?.id ?? "";
+
+  // What this product was advertised at last time, so re-runs start informed.
+  useEffect(() => {
+    if (!group?.key || !clientId) {
+      setLastUsed(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/clients/${clientId}/products/price-history?groupKey=${encodeURIComponent(group.key)}`
+        );
+        if (!response.ok) return;
+        const data = await response.json().catch(() => null);
+        if (!cancelled) {
+          setLastUsed(
+            data?.lastPrice
+              ? { price: data.lastPrice, usedAt: data.lastUsedAt ?? null }
+              : null
+          );
+        }
+      } catch {
+        // The hint is best-effort only.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [group?.key, clientId]);
 
   const countries = useMemo(
     () => (group ? availableCountries(group, eligible) : []),
@@ -154,6 +213,16 @@ export function DayProductForm({
 
   const defaultTemplateName =
     prompts.find((prompt) => prompt.id === defaults.templateId)?.name ?? "none";
+
+  // The source-level price this product falls back to when no override is set.
+  const sourceDefaultPrice = useMemo(() => {
+    if (!group) return "";
+    for (const listing of group.listings) {
+      const value = listing.campaignUrlRule?.defaultPrice?.trim();
+      if (value) return value;
+    }
+    return "";
+  }, [group]);
 
   const toggleCountry = (code: string) => {
     setSelectedCountries((prev) =>
@@ -210,7 +279,7 @@ export function DayProductForm({
       sendTime: useTimeDefault ? null : sendTime,
       mailingListOverrides: useMailingDefault ? null : dayOverrides,
       selectedImageUrl,
-      priceOverride: initial?.priceOverride ?? null,
+      priceOverride: price.trim() || null,
       status: initial?.status ?? "PLANNED",
     });
   };
@@ -225,6 +294,9 @@ export function DayProductForm({
             selectedKey={group?.key ?? null}
             eligible={eligible}
             disabledKeys={usedKeys}
+            performance={performance}
+            ranks={ranks}
+            performanceLabel={performanceLabel}
             onSelect={(next) => {
               setGroup(next);
               setSelectedCountries(availableCountries(next, eligible));
@@ -259,6 +331,24 @@ export function DayProductForm({
                 <Badge variant="warning">No active country</Badge>
               </div>
             )}
+            {(() => {
+              const perf = performance?.get(group.key);
+              if (!perf) return null;
+              const rank = ranks?.get(group.key);
+              return (
+                <p className="mt-0.5 truncate text-[11px] text-muted">
+                  {rank && rank <= 10 ? (
+                    <span className="font-semibold text-amber-600">
+                      #{rank} top seller ·{" "}
+                    </span>
+                  ) : null}
+                  {performanceLabel ? `${performanceLabel}: ` : ""}
+                  {formatMetric("quantity", perf.quantity)} sold ·{" "}
+                  {formatMetric("revenue", perf.revenue)} ·{" "}
+                  {formatMetric("profit", perf.profit)} profit
+                </p>
+              );
+            })()}
           </div>
           <Button
             variant="secondary"
@@ -297,6 +387,42 @@ export function DayProductForm({
               );
             })}
           </div>
+        </Field>
+      )}
+
+      {/* Price — per-product campaign price */}
+      {group && !changingProduct && (
+        <Field
+          label="Campaign price"
+          hint="Used in campaign links and the {price} variable — leave empty for the source default"
+        >
+          <div className="max-w-[14rem]">
+            <Input
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+              placeholder={
+                sourceDefaultPrice
+                  ? `Source default (${sourceDefaultPrice})`
+                  : "Source default"
+              }
+            />
+          </div>
+          {lastUsed && (
+            <p className="mt-1.5 text-xs text-muted">
+              Last campaign price:{" "}
+              <span className="font-semibold text-ink">{lastUsed.price}</span>
+              {lastUsed.usedAt ? ` · ${formatShortDate(lastUsed.usedAt)}` : ""}
+              {lastUsed.price !== price.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setPrice(lastUsed.price)}
+                  className="ml-2 font-semibold text-brand-600 transition-colors hover:text-brand-700"
+                >
+                  Use it
+                </button>
+              )}
+            </p>
+          )}
         </Field>
       )}
 

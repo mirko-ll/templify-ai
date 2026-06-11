@@ -221,6 +221,7 @@ model Client {
   products       Product[]
   productSyncRuns ProductSyncRun[]
   campaignPlans  CampaignPlan[]
+  performanceReports ProductPerformanceReport[]
 
   @@index([userId])
   @@index([isArchived])
@@ -473,6 +474,56 @@ model CampaignPlan {
   @@index([clientId])
   @@index([year, month])
   @@index([status])
+}
+
+/**
+ * One imported monthly sales report (xlsx) per client+month — re-importing the
+ * same month replaces the previous upload's entries.
+ */
+model ProductPerformanceReport {
+  id           String   @id @default(cuid())
+  clientId     String
+  year         Int
+  month        Int // 1-12
+  fileName     String?
+  rowCount     Int      @default(0)
+  matchedCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client  Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  entries ProductPerformanceEntry[]
+
+  @@unique([clientId, year, month])
+  @@index([clientId])
+}
+
+/**
+ * One product row from an imported report. `campaignName` is the raw sheet
+ * value (the shop's product codename); `groupKey` is the matched Templaito
+ * product group key (null = not in the catalog / awaiting manual link).
+ */
+model ProductPerformanceEntry {
+  id             String   @id @default(cuid())
+  reportId       String
+  clientId       String
+  year           Int
+  month          Int
+  campaignName   String
+  groupKey       String?
+  orders         Int      @default(0)
+  quantity       Int      @default(0)
+  revenue        Float    @default(0)
+  uniqueProducts Int      @default(0)
+  profit         Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  report ProductPerformanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, campaignName])
+  @@index([clientId, groupKey])
+  @@index([clientId, year, month])
 }
 
 model CampaignPlanItem {

@@ -14,6 +14,16 @@ function hasListings(snapshot: unknown): boolean {
   );
 }
 
+/** Resend days carry no listings — they clone an existing campaign instead. */
+function isResend(snapshot: unknown): boolean {
+  return Boolean(
+    snapshot &&
+      typeof snapshot === "object" &&
+      typeof (snapshot as { resend?: { sourceCampaignId?: unknown } }).resend
+        ?.sourceCampaignId === "string"
+  );
+}
+
 /**
  * Kick off background generation + scheduling for a plan's items.
  *
@@ -64,7 +74,9 @@ export async function POST(
   });
 
   const queueIds = candidates
-    .filter((item) => hasListings(item.productSnapshot))
+    .filter(
+      (item) => hasListings(item.productSnapshot) || isResend(item.productSnapshot)
+    )
     .map((item) => item.id);
 
   if (queueIds.length === 0) {

@@ -2,8 +2,8 @@
 
 import {
   CalendarDaysIcon,
-  CheckCircleIcon,
   SparklesIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Badge, StatusBadge } from "@/components/ui/badge";
@@ -14,18 +14,18 @@ import type { CampaignPlan } from "./product-catalog-types";
 interface MonthlyPlansSectionProps {
   plans: CampaignPlan[];
   creatingPlan: "MANUAL" | "ASSISTED" | null;
-  approvingPlanId: string | null;
+  deletingPlanId: string | null;
   onCreatePlan: (mode: "MANUAL" | "ASSISTED") => void;
-  onApprovePlan: (id: string) => void;
+  onDeletePlan: (id: string) => void;
   onOpenPlanner: (target?: { year: number; month: number }) => void;
 }
 
 export function MonthlyPlansSection({
   plans,
   creatingPlan,
-  approvingPlanId,
+  deletingPlanId,
   onCreatePlan,
-  onApprovePlan,
+  onDeletePlan,
   onOpenPlanner,
 }: MonthlyPlansSectionProps) {
   return (
@@ -79,7 +79,15 @@ export function MonthlyPlansSection({
                 <p className="mt-1 text-sm text-muted">
                   {plan.items.length > 0
                     ? plan.items
-                        .map((item) => item.product?.title || item.type)
+                        .map(
+                          (item) =>
+                            // The snapshot title is SI-preferred; the linked
+                            // product row is an arbitrary country variant.
+                            item.productSnapshot?.title ||
+                            item.productSnapshot?.slug ||
+                            item.product?.title ||
+                            item.type
+                        )
                         .join(" + ")
                     : "Ready for manual product selection"}
                 </p>
@@ -94,19 +102,17 @@ export function MonthlyPlansSection({
                 >
                   Open
                 </Button>
-                {plan.status === "DRAFT" && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onApprovePlan(plan.id)}
-                    disabled={approvingPlanId === plan.id}
-                    isLoading={approvingPlanId === plan.id}
-                    leftIcon={<CheckCircleIcon className="h-4 w-4" />}
-                    className="text-emerald-700 hover:bg-emerald-50"
-                  >
-                    Approve
-                  </Button>
-                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onDeletePlan(plan.id)}
+                  disabled={deletingPlanId === plan.id}
+                  isLoading={deletingPlanId === plan.id}
+                  leftIcon={<TrashIcon className="h-4 w-4" />}
+                  className="text-rose-600 hover:bg-rose-50"
+                >
+                  Delete
+                </Button>
               </div>
             </div>
           ))}

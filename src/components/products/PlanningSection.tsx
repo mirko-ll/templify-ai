@@ -29,6 +29,7 @@ import {
   type SourceUpdatePayload,
 } from "./ProductSourceEditModal";
 import { MonthlyPlansSection } from "./MonthlyPlansSection";
+import { SalesReportsSection } from "./SalesReportsSection";
 
 interface PlanningSectionProps {
   clientId: string;
@@ -67,7 +68,7 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
   const [creatingPlan, setCreatingPlan] = useState<"MANUAL" | "ASSISTED" | null>(
     null
   );
-  const [approvingPlanId, setApprovingPlanId] = useState<string | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
 
   const loadSources = useCallback(async () => {
     const response = await fetch(`/api/clients/${clientId}/product-sources`);
@@ -296,25 +297,34 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
     }
   };
 
-  const approvePlan = async (planId: string) => {
-    setApprovingPlanId(planId);
+  const deletePlan = async (planId: string) => {
+    const confirmed = await confirm({
+      title: "Delete monthly plan?",
+      description:
+        "Planned days are removed. Plans with scheduled or generating campaigns can't be deleted — unschedule those days first.",
+      confirmLabel: "Delete plan",
+      confirmVariant: "danger",
+    });
+    if (!confirmed) return;
+
+    setDeletingPlanId(planId);
     try {
       const response = await fetch(
-        `/api/clients/${clientId}/campaign-plans/${planId}/approve`,
-        { method: "POST" }
+        `/api/clients/${clientId}/campaign-plans/${planId}`,
+        { method: "DELETE" }
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
-        throw new Error(payload?.error || "Failed to approve plan");
-      toast.success("Campaign plan approved");
+        throw new Error(payload?.error || "Failed to delete plan");
+      toast.success("Monthly plan deleted");
       await loadPlans();
     } catch (error) {
       toast.error(
-        "Couldn't approve plan",
+        "Couldn't delete plan",
         error instanceof Error ? error.message : undefined
       );
     } finally {
-      setApprovingPlanId(null);
+      setDeletingPlanId(null);
     }
   };
 
@@ -425,12 +435,16 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
             />
 
             <div className="border-t border-line pt-6">
+              <SalesReportsSection clientId={clientId} />
+            </div>
+
+            <div className="border-t border-line pt-6">
               <MonthlyPlansSection
                 plans={plans}
                 creatingPlan={creatingPlan}
-                approvingPlanId={approvingPlanId}
+                deletingPlanId={deletingPlanId}
                 onCreatePlan={createPlan}
-                onApprovePlan={approvePlan}
+                onDeletePlan={deletePlan}
                 onOpenPlanner={openPlanner}
               />
             </div>

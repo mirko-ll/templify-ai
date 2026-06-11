@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  maybeCompletePlan,
+  syncCampaignPlanItems,
+} from "@/lib/campaign-plan-sync";
 import { denyUnlessClientAccess } from "@/lib/client-access";
 import { Prisma } from "@prisma/client";
 
@@ -46,12 +50,63 @@ export async function GET(
   const access = await denyUnlessClientAccess(id, userId);
   if (access.response) return access.response;
 
+  let plan = await loadPlan(planId, id);
+  if (!plan) {
+    return NextResponse.json({ error: "Campaign plan not found" }, { status: 404 });
+  }
+
+  // Surface backend publish failures and recover items orphaned by a dead
+  // generation runner before handing the plan to the UI.
+  if (await syncCampaignPlanItems(plan.items)) {
+    plan = await loadPlan(planId, id);
+  }
+  if (plan && (await maybeCompletePlan(plan, plan.items))) {
+    plan = { ...plan, status: "COMPLETED" };
+  }
+
+  return NextResponse.json({ plan });
+}
+
+/**
+ * Delete a plan and its items. Blocked while any item is in the generation
+ * pipeline — scheduled campaigns would keep sending with no plan to manage
+ * them from, so those days must be unscheduled first.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; planId: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  const userId = ((session as any)?.user as any)?.id as string | undefined;
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, planId } = await params;
+  const access = await denyUnlessClientAccess(id, userId);
+  if (access.response) return access.response;
+
   const plan = await loadPlan(planId, id);
   if (!plan) {
     return NextResponse.json({ error: "Campaign plan not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ plan });
+  const blocking = plan.items.filter((item) =>
+    (LOCKED_STATUSES as readonly string[]).includes(item.status)
+  ).length;
+  if (blocking > 0) {
+    return NextResponse.json(
+      {
+        error: `This plan has ${blocking} scheduled or generating ${
+          blocking === 1 ? "campaign" : "campaigns"
+        }. Unschedule those days before deleting the plan.`,
+      },
+      { status: 409 }
+    );
+  }
+
+  await prisma.campaignPlan.delete({ where: { id: planId } });
+  return NextResponse.json({ ok: true });
 }
 
 interface IncomingItem {
@@ -149,6 +204,16 @@ export async function PUT(
       .filter(Boolean) as string[]
   );
 
+  // Failed days keep their FAILED status (and error) through rebuilds —
+  // otherwise the pre-generate save resets them to PLANNED and
+  // "regenerate failed" finds nothing to retry.
+  const failedByKey = new Map<string, string | null>();
+  for (const item of existing.items) {
+    if (item.status !== "FAILED") continue;
+    const day = dayKey(item.sendDate);
+    if (day) failedByKey.set(`${day}::${item.groupKey ?? ""}`, item.errorMessage);
+  }
+
   const incoming = Array.isArray(body?.items) ? (body.items as IncomingItem[]) : [];
   const prepared = incoming
     .map((item) => {
@@ -221,7 +286,8 @@ export async function PUT(
         data: {
           planId,
           type: "MANUAL",
-          status: "PLANNED",
+          status: failedByKey.has(item.dedupeKey) ? "FAILED" : "PLANNED",
+          errorMessage: failedByKey.get(item.dedupeKey) ?? null,
           position: lockedItems.length + index,
           sendDate: item.sendDate,
           groupKey: item.groupKey,
