@@ -9,7 +9,7 @@ export const maxDuration = 300;
 
 /** Kick off a background sync of every enabled product source for the client. */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
@@ -33,11 +33,15 @@ export async function POST(
     );
   }
 
+  // force=true re-scrapes every page instead of skipping sitemap-unchanged ones.
+  const body = await request.json().catch(() => ({}));
+  const force = body?.force === true;
+
   try {
     const result = await callTemplaitoBackend({
       path: `/product-sources/sync-all`,
       method: "POST",
-      body: JSON.stringify({ clientId: id }),
+      body: JSON.stringify({ clientId: id, force }),
     });
     return NextResponse.json(result, { status: 202 });
   } catch (error) {

@@ -13,6 +13,8 @@ export interface ProductSyncRun {
   missingCount: number;
   failedCount: number;
   errorMessage?: string | null;
+  /** Extra counters — `unchanged` = pages skipped via sitemap lastmod. */
+  log?: { skipped?: number; unchanged?: number } | null;
 }
 
 export interface ProductSource {

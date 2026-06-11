@@ -8,7 +8,7 @@ import { callTemplaitoBackend } from "@/lib/templaito-backend";
 export const maxDuration = 300;
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; sourceId: string }> }
 ) {
   const session = await getServerSession(authOptions);
@@ -35,11 +35,15 @@ export async function POST(
     return NextResponse.json({ error: "Product source not found" }, { status: 404 });
   }
 
+  // force=true re-scrapes every page instead of skipping sitemap-unchanged ones.
+  const body = await request.json().catch(() => ({}));
+  const force = body?.force === true;
+
   try {
     const result = await callTemplaitoBackend({
       path: `/product-sources/${sourceId}/sync`,
       method: "POST",
-      body: JSON.stringify({ clientId: id }),
+      body: JSON.stringify({ clientId: id, force }),
     });
     return NextResponse.json(result, { status: 202 });
   } catch (error) {

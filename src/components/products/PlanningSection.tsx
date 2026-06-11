@@ -70,6 +70,7 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
     null
   );
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+  const [clearingProducts, setClearingProducts] = useState(false);
 
   const loadSources = useCallback(async () => {
     const response = await fetch(`/api/clients/${clientId}/product-sources`);
@@ -105,6 +106,20 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Live progress: while any source's latest run is RUNNING, keep the list
+  // fresh so per-source counters tick in as the background sync works.
+  const hasRunningSync = useMemo(
+    () => sources.some((source) => source.syncRuns?.[0]?.status === "RUNNING"),
+    [sources]
+  );
+  useEffect(() => {
+    if (!hasRunningSync) return;
+    const interval = setInterval(() => {
+      loadSources().catch(() => null);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [hasRunningSync, loadSources]);
 
   const latestRun = useMemo(() => {
     return sources
@@ -255,18 +270,24 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
     }
   };
 
-  const syncAll = async () => {
+  const syncAll = async (force = false) => {
     setSyncingAll(true);
     try {
       const response = await fetch(
         `/api/clients/${clientId}/product-sources/sync-all`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force }),
+        }
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Failed to start sync");
       toast.success(
-        "Syncing all sources",
-        `${payload.sourceCount ?? "All"} sources queued — this runs in the background.`
+        force ? "Full re-sync started" : "Syncing all sources",
+        force
+          ? `${payload.sourceCount ?? "All"} sources queued — every product page is re-scraped, so this takes a while.`
+          : `${payload.sourceCount ?? "All"} sources queued — unchanged products are skipped, so this is quick.`
       );
       await loadSources();
       window.setTimeout(() => {
@@ -279,6 +300,40 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
       );
     } finally {
       setSyncingAll(false);
+    }
+  };
+
+  /** Wipe the synced catalog so the next "Sync all" rebuilds it from scratch. */
+  const clearProducts = async () => {
+    const confirmed = await confirm({
+      title: "Clear all synced products?",
+      description:
+        "Deletes every synced product and listing for this client — the next sync rebuilds the catalog from scratch. Monthly plans keep their product snapshots and campaigns are untouched.",
+      confirmLabel: "Clear products",
+      confirmVariant: "danger",
+    });
+    if (!confirmed) return;
+
+    setClearingProducts(true);
+    try {
+      const response = await fetch(`/api/clients/${clientId}/products`, {
+        method: "DELETE",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(payload?.error || "Failed to clear products");
+      toast.success(
+        `${payload.deleted ?? 0} products cleared`,
+        "Run “Sync all” to rebuild the catalog."
+      );
+      await loadSources().catch(() => null);
+    } catch (error) {
+      toast.error(
+        "Couldn't clear products",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setClearingProducts(false);
     }
   };
 
@@ -503,8 +558,10 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
               syncingSourceId={syncingSourceId}
               removingSourceId={removingSourceId}
               syncingAll={syncingAll}
+              clearingProducts={clearingProducts}
               onSync={syncSource}
               onSyncAll={syncAll}
+              onClearProducts={clearProducts}
               onEdit={setEditingSource}
               onRemove={removeSource}
             />

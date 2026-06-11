@@ -24,6 +24,8 @@ const FREE_WORDS = new Set([
   "gratuit",
   "gratuite",
   "gratuito",
+  "gratuita",
+  "grátis",
   "omaggio",
   "ingyen",
   "ingyenes",
@@ -33,10 +35,32 @@ const FREE_WORDS = new Set([
   "brezplacno",
   "brezplačno",
   "gratisi",
+  // Baltics
+  "nemokamai",
+  "nemokama",
+  "nemokamas",
+  "dovanu",
+  "dovanų",
+  "tasuta",
+  "bezmaksas",
+  // Polish (the "za" of "za darmo" is handled by the bundle backstop)
+  "darmo",
+  "darmowy",
+  "darmowa",
+  // Romanian / Turkish / Finnish
+  "gratuită",
+  "cadou",
+  "ücretsiz",
+  "bedava",
+  "ilmainen",
+  "ilmaiseksi",
 ]);
 
 /** Matches any Greek or Cyrillic character — used to spot non-Latin trailing markers. */
 const NON_LATIN_RE = /[Ͱ-ϿЀ-ԯ]/;
+
+/** Offer-bundle token like "1+1" or "12+12" — what localized markers trail. */
+const OFFER_BUNDLE_RE = /^\d+\+\d+$/;
 
 /** Strip surrounding punctuation/whitespace from a single token. */
 function cleanToken(token: string): string {
@@ -49,6 +73,17 @@ function isFreeWord(token: string): boolean {
 
 function isNonLatinWord(token: string): boolean {
   return NON_LATIN_RE.test(token);
+}
+
+/**
+ * Language-agnostic backstop for words the dictionary doesn't know: a purely
+ * alphabetic token directly after an offer bundle ("BULBCAM 1+1 NEMOKAMAI") is
+ * a localized marketing marker, never part of the offer code itself.
+ */
+function isWordAfterBundle(tokens: string[], index: number): boolean {
+  if (index < 1) return false;
+  const word = cleanToken(tokens[index]);
+  return /^\p{L}+$/u.test(word) && OFFER_BUNDLE_RE.test(cleanToken(tokens[index - 1]));
 }
 
 /**
@@ -73,12 +108,14 @@ export function extractProductGroupSlug(title: string): string {
 
   const tokens = afterPipe.split(/\s+/).filter(Boolean);
 
-  // Drop trailing localized "free" markers (known Latin words or non-Latin tokens),
-  // always keeping at least the first token.
+  // Drop trailing localized "free" markers — known Latin words, non-Latin
+  // tokens, or any word directly after a "1+1"-style bundle (the language-
+  // agnostic backstop) — always keeping at least the first token.
   while (
     tokens.length > 1 &&
     (isFreeWord(tokens[tokens.length - 1]) ||
-      isNonLatinWord(tokens[tokens.length - 1]))
+      isNonLatinWord(tokens[tokens.length - 1]) ||
+      isWordAfterBundle(tokens, tokens.length - 1))
   ) {
     tokens.pop();
   }

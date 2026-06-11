@@ -10,6 +10,31 @@ function parseLimit(value: string | null) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : 50;
 }
 
+/**
+ * Clear the client's synced catalog so the next sync rebuilds it from scratch
+ * (e.g. after a grouping fix). Listings and images cascade with their products;
+ * plan items keep their snapshots (productId just goes null); campaigns are
+ * untouched. Sources and sync-run history stay.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  const userId = ((session as any)?.user as any)?.id as string | undefined;
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const access = await denyUnlessClientAccess(id, userId);
+  if (access.response) return access.response;
+
+  const { count } = await prisma.product.deleteMany({ where: { clientId: id } });
+  return NextResponse.json({ ok: true, deleted: count });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

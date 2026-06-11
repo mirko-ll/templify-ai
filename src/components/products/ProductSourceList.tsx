@@ -22,8 +22,12 @@ interface ProductSourceListProps {
   syncingSourceId: string | null;
   removingSourceId: string | null;
   syncingAll?: boolean;
+  clearingProducts?: boolean;
   onSync: (id: string) => void;
-  onSyncAll?: () => void;
+  /** force = re-scrape everything, ignoring the sitemap's change stamps. */
+  onSyncAll?: (force?: boolean) => void;
+  /** Wipe the synced catalog so the next sync rebuilds it. */
+  onClearProducts?: () => void;
   onEdit: (source: ProductSource) => void;
   onRemove: (id: string) => void;
 }
@@ -33,8 +37,10 @@ export function ProductSourceList({
   syncingSourceId,
   removingSourceId,
   syncingAll = false,
+  clearingProducts = false,
   onSync,
   onSyncAll,
+  onClearProducts,
   onEdit,
   onRemove,
 }: ProductSourceListProps) {
@@ -63,18 +69,40 @@ export function ProductSourceList({
           <span className="font-normal text-muted">({sources.length})</span>
         </h3>
         {onSyncAll && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onSyncAll}
-            disabled={syncingAll || syncingSourceId !== null}
-            isLoading={syncingAll}
-            leftIcon={
-              !syncingAll ? <ArrowPathIcon className="h-4 w-4" /> : undefined
-            }
-          >
-            {syncingAll ? "Starting…" : "Sync all"}
-          </Button>
+          <div className="flex items-center gap-3">
+            {onClearProducts && (
+              <button
+                type="button"
+                onClick={onClearProducts}
+                disabled={clearingProducts || syncingAll || syncingSourceId !== null}
+                title="Delete every synced product for this client — the next sync rebuilds the catalog from scratch"
+                className="text-xs font-medium text-rose-600 transition-colors hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {clearingProducts ? "Clearing…" : "Clear products"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onSyncAll(true)}
+              disabled={syncingAll || syncingSourceId !== null}
+              title="Re-scrape every product page, ignoring what the sitemaps say is unchanged"
+              className="text-xs font-medium text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Full re-sync
+            </button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onSyncAll(false)}
+              disabled={syncingAll || syncingSourceId !== null}
+              isLoading={syncingAll}
+              leftIcon={
+                !syncingAll ? <ArrowPathIcon className="h-4 w-4" /> : undefined
+              }
+            >
+              {syncingAll ? "Starting…" : "Sync all"}
+            </Button>
+          </div>
         )}
       </div>
       <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-soft">
@@ -128,6 +156,9 @@ export function ProductSourceList({
                         value={run.updatedCount}
                         tone="brand"
                       />
+                      {(run.log?.unchanged ?? 0) > 0 && (
+                        <RunStat label="same" value={run.log!.unchanged!} />
+                      )}
                       <RunStat
                         label="miss"
                         value={run.missingCount}

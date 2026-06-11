@@ -50,6 +50,8 @@ export async function GET(
           missingCount: true,
           failedCount: true,
           errorMessage: true,
+          // { skipped, unchanged } — surfaces how much the incremental sync saved.
+          log: true,
         },
       },
     },
