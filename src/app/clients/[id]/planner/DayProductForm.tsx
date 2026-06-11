@@ -21,6 +21,8 @@ import {
   availableCountries,
   formatMetric,
   formatTime12h,
+  localDayKey,
+  localTimeKey,
   type CountryOption,
   type DayAssignment,
   type MailingList,
@@ -29,6 +31,16 @@ import {
   type ProductGroup,
   type PromptOption,
 } from "./planner-types";
+
+/** Planning *today* is allowed — but only at a send time that's still ahead. */
+export function pastTimeTodayError(
+  dayKey: string,
+  sendTime: string
+): string | null {
+  const now = new Date();
+  if (dayKey !== localDayKey(now) || sendTime > localTimeKey(now)) return null;
+  return `${formatTime12h(sendTime)} has already passed today — pick a later send time.`;
+}
 
 interface DayProductFormProps {
   dayKey: string;
@@ -260,6 +272,14 @@ export function DayProductForm({
     const effectiveTemplate = useTemplateDefault ? defaults.templateId : templateId;
     if (!effectiveTemplate) {
       setError("Select an email template (or set a shared default).");
+      return;
+    }
+    const timeError = pastTimeTodayError(
+      dayKey,
+      useTimeDefault ? defaults.sendTime : sendTime
+    );
+    if (timeError) {
+      setError(timeError);
       return;
     }
     // Keep only overrides for this product's selected countries.

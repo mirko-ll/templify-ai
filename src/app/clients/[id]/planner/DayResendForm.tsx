@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { DefaultToggle } from "./DayProductForm";
+import { DefaultToggle, pastTimeTodayError } from "./DayProductForm";
 import { ResendCampaignPicker, lastSentAt } from "./ResendCampaignPicker";
 import {
   assignmentId,
@@ -103,6 +103,14 @@ export function DayResendForm({
   const handleSubmit = () => {
     if (!source) {
       setError("Pick a campaign to resend.");
+      return;
+    }
+    const timeError = pastTimeTodayError(
+      dayKey,
+      useTimeDefault ? defaults.sendTime : sendTime
+    );
+    if (timeError) {
+      setError(timeError);
       return;
     }
     onSubmit({

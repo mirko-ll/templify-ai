@@ -817,7 +817,7 @@ export default function PlannerPage() {
         performance={perfMaps.byGroupKey}
         ranks={perfMaps.ranks}
         performanceLabel={perfMaps.label}
-        readOnly={editingDay !== null && (editingDay <= todayKey || busy)}
+        readOnly={editingDay !== null && (editingDay < todayKey || busy)}
         onClose={() => setEditingDay(null)}
         onChangeDay={handleChangeDay}
         onPreview={(item) => {

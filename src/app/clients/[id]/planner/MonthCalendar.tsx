@@ -159,7 +159,9 @@ export function MonthCalendar({
           if (!cell) return <div key={`blank-${index}`} />;
           const { day, dayKey } = cell;
           const items = assignmentsByDay.get(dayKey) ?? [];
-          const assignable = dayKey > todayKey;
+          // Today included — sends later today are valid; the day forms make
+          // sure the chosen send time is still ahead.
+          const assignable = dayKey >= todayKey;
           const editable = assignable && !disabledEditing;
           // Past days (and days while generation runs) still open read-only so
           // scheduled campaigns can be reviewed.
