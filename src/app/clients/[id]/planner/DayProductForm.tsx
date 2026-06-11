@@ -414,7 +414,7 @@ export function DayProductForm({
       {group && !changingProduct && (
         <Field
           label="Campaign price"
-          hint="Used in campaign links and the {price} variable — leave empty for the source default"
+          hint="In € — links always carry the € value (the shop converts on the page); emails quote each country's local display price. Leave empty for the source defaults."
         >
           <div className="max-w-[14rem]">
             <Input

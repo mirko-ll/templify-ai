@@ -45,7 +45,14 @@
       "PowerShell(Set-Content *)",
       "PowerShell(Move-Item *)",
       "PowerShell(npx tsx scripts/test-grouping.ts)",
-      "PowerShell(npx tsx scripts/test-grouping2.ts)"
+      "PowerShell(npx tsx scripts/test-grouping2.ts)",
+      "PowerShell(node scripts/inspect-prices.mjs)",
+      "PowerShell(node scripts/inspect-bulbcam.mjs)",
+      "PowerShell(node scripts/inspect-bulbcam.mjs 2>$null | Select-Object -Last 6)",
+      "PowerShell(npx tsx scripts/test-format.mts)",
+      "PowerShell(node scripts/inspect-latest.mjs)",
+      "PowerShell(node scripts/inspect-urls.mjs)",
+      "PowerShell(npx tsx scripts/test-localize.mts)"
     ],
     "deny": [],
     "ask": [],

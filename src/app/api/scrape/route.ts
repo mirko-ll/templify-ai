@@ -9,6 +9,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { ProductInfo, MultiProductInfo, TemplateType } from "../../types/types";
 import { generateMultiProductTemplate } from "../../utils/multiProductTemplate";
+import { formatPriceLike } from "@/lib/product-links";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
       templateType,
       isTest,
       countryUrls,
+      countryPrices,
       singleUrlMode,
       regenerateOnly,
       productInfo: providedProductInfo,
@@ -310,6 +312,30 @@ export async function POST(request: Request) {
           }
         })
       );
+
+      // Price-in-URL shops render the sale price client-side, so the scrape
+      // misses it or catches a stale static one. The caller (monthly planner)
+      // knows the exact price each country's link carries — that price is what
+      // the landing page will display, so it overrides the scraped sale price
+      // outright, BEFORE the email is generated. The copy then quotes the real
+      // offer price and the per-country localization can swap it correctly.
+      if (
+        countryPrices &&
+        typeof countryPrices === "object" &&
+        !Array.isArray(countryPrices)
+      ) {
+        for (const [code, rawPrice] of Object.entries(
+          countryPrices as Record<string, unknown>
+        )) {
+          if (typeof rawPrice !== "string" || !rawPrice.trim()) continue;
+          const result = countryResults[code];
+          if (result?.type !== "SINGLE" || !result.productInfo) continue;
+          result.productInfo.salePrice = formatPriceLike(
+            rawPrice.trim(),
+            result.productInfo.regularPrice ?? ""
+          );
+        }
+      }
 
       const primaryResult = countryResults[primaryEntry.countryCode];
 

@@ -47,6 +47,10 @@ interface SnapshotListing {
   title?: string | null;
   normalizedTitle?: string | null;
   campaignUrlRule?: CampaignUrlRule | null;
+  priceRaw?: string | null;
+  regularPrice?: string | null;
+  salePrice?: string | null;
+  currency?: string | null;
 }
 
 function snapshotListings(snapshot: unknown): SnapshotListing[] {
@@ -67,6 +71,82 @@ function snapshotTitle(snapshot: unknown): string | undefined {
     if (typeof title === "string" && title.trim()) return title.trim();
   }
   return undefined;
+}
+
+/** Parse a European-format price string ("519 Kč", "62,99€", "4.990 Ft") to a number. */
+export function parsePriceNumber(value: string | null | undefined): number | null {
+  const cleaned = (value ?? "").replace(/[^\d.,]/g, "");
+  if (!cleaned) return null;
+  let normalized = cleaned;
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else if (cleaned.includes(",")) {
+    normalized = cleaned.replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(cleaned)) {
+    normalized = cleaned.replace(/\./g, "");
+  }
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** What currency a listing's scraped prices are in: EUR, something else, or unknown. */
+function listingCurrency(listing: SnapshotListing): "EUR" | "OTHER" | null {
+  const iso = listing.currency?.trim().toUpperCase();
+  if (iso === "EUR") return "EUR";
+  if (iso && /^[A-Z]{3}$/.test(iso)) return "OTHER";
+  const text = `${listing.priceRaw ?? ""} ${listing.regularPrice ?? ""} ${listing.salePrice ?? ""}`;
+  if (text.includes("€") || /\bEUR\b/.test(text)) return "EUR";
+  if (/Kč|Ft|zł|lei|лв|дин|РСД/iu.test(text)) return "OTHER";
+  return null;
+}
+
+/** The listing's most representative price for ratio math (regular beats sale). */
+function listingPrice(
+  listing: SnapshotListing
+): { value: number; text: string } | null {
+  for (const text of [listing.regularPrice, listing.salePrice, listing.priceRaw]) {
+    const value = parsePriceNumber(text);
+    if (value !== null) return { value, text: text as string };
+  }
+  return null;
+}
+
+function listingPriceNumber(listing: SnapshotListing): number | null {
+  return listingPrice(listing)?.value ?? null;
+}
+
+/**
+ * Estimate the local price a non-EUR country's landing page will DISPLAY.
+ *
+ * These shops' URL price parameter is always in EUR — the landing page itself
+ * converts to the local currency (full "N,99" euro price × shop rate, floored,
+ * with ",99" re-appended: 18,99 € → 94,99 lei). Mirror that using the shop's
+ * own implied rate, derived from the catalog's listed prices for this product
+ * ("94,99 lei" vs "18,99 €" → ×5). Returns the integer part only — the
+ * sale-price backfill re-adds the country's standard decimals.
+ *
+ * EUR (and unknown-currency) listings return the price unchanged; null means
+ * no safe estimate — callers then skip the email backfill for that country.
+ */
+export function localizeEurPrice(
+  eurPrice: string,
+  listing: SnapshotListing,
+  euroReference: SnapshotListing | null
+): string | null {
+  const currency = listingCurrency(listing);
+  if (currency !== "OTHER") return eurPrice;
+  const eurValue = parsePriceNumber(eurPrice);
+  const local = listingPrice(listing);
+  const ref = euroReference ? listingPrice(euroReference) : null;
+  if (!eurValue || !local || !ref) return null;
+  // The page converts the full euro price ("13" displays as 13,99 €) — adopt
+  // the euro decimal ending from the price string the rate was derived from.
+  let displayEur = eurValue;
+  if (!/[.,]\d{1,2}$/.test(eurPrice.trim())) {
+    const decimals = ref.text.match(/\d[.,](\d{2})(?!.*\d)/);
+    if (decimals) displayEur = eurValue + Number.parseFloat(`0.${decimals[1]}`);
+  }
+  return String(Math.floor(displayEur * (local.value / ref.value)));
 }
 
 /** Campaign id a resend day clones, if this is one (set by the day editor's resend form). */
@@ -299,10 +379,26 @@ export async function runPlanGeneration(planId: string): Promise<void> {
               : a.localeCompare(b)
         );
         const countryUrls: Record<string, string[]> = {};
+        // What each country's landing page will DISPLAY as the offer price —
+        // feeds the salePrice backfill so the email matches the page.
+        const countryDisplayPrices: Record<string, string> = {};
+        // A canonical EUR-priced listing of this product — the rate reference
+        // for estimating non-EUR display prices (the URL itself stays in EUR).
+        const euroListings = snapshotListings(item.productSnapshot).filter(
+          (listing) =>
+            listingCurrency(listing) === "EUR" &&
+            listingPriceNumber(listing) !== null
+        );
+        const euroReference =
+          euroListings.length > 0 ? pickCanonicalListing(euroListings) : null;
         for (const code of orderedCodes) {
           const listings = listingsByCountry[code];
           const chosen = pickCanonicalListing(listings);
           let url = chosen.campaignUrl || chosen.url;
+          // The URL price parameter is ALWAYS in EUR — the shops convert to
+          // the local currency on the page — so the override goes into every
+          // country's link as typed (and the default prices are EUR too).
+          let appliedEurPrice = chosen.campaignUrlRule?.defaultPrice?.trim() || null;
           if (priceOverride && chosen.url && chosen.campaignUrlRule) {
             try {
               url = buildCampaignUrl({
@@ -319,11 +415,18 @@ export async function runPlanGeneration(planId: string): Promise<void> {
                 rule: chosen.campaignUrlRule,
                 price: priceOverride,
               });
+              appliedEurPrice = priceOverride;
             } catch {
               // Malformed listing URL — keep the prebuilt campaign link.
             }
           }
-          if (url) countryUrls[code] = [url];
+          if (url) {
+            countryUrls[code] = [url];
+            if (appliedEurPrice) {
+              const display = localizeEurPrice(appliedEurPrice, chosen, euroReference);
+              if (display) countryDisplayPrices[code] = display;
+            }
+          }
         }
         const primaryUrl = Object.values(countryUrls)[0]?.[0];
         if (!primaryUrl) {
@@ -335,13 +438,17 @@ export async function runPlanGeneration(planId: string): Promise<void> {
           return;
         }
 
-        // 1. Generate the email HTML via the existing scrape pipeline.
+        // 1. Generate the email HTML via the existing scrape pipeline. The
+        // per-country DISPLAY prices ride along so the scrape can backfill sale
+        // prices the landing pages only render client-side — BEFORE the email
+        // copy is written (otherwise the CTA quotes the regular price).
         const scrapeResponse = await fetch(`${APP_URL}/api/scrape`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             clientId: plan.clientId,
             countryUrls,
+            countryPrices: countryDisplayPrices,
             url: primaryUrl,
             templateType: {
               name: prompt.name,

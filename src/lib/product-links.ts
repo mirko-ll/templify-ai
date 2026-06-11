@@ -35,6 +35,29 @@ function priceInt(value: string) {
   return Number.isFinite(parsed) ? String(Math.trunc(parsed)) : "";
 }
 
+/**
+ * Format a bare price value the way a country writes its prices, copying the
+ * currency symbol and its position/spacing from a sample ("519 Kč" → "189 Kč",
+ * "62,99€" → "7,50€"). An integer-only value also adopts the sample's decimal
+ * ending ("14" + sample "14,99€" → "14,99€") — these shops' URL price schemes
+ * carry only the integer part and the landing page appends the catalog's
+ * standard ",99" itself, so the email must match what the page will show.
+ * Falls back to a trailing € when the sample is unusable.
+ */
+export function formatPriceLike(value: string, sample: string): string {
+  const trimmed = (sample ?? "").trim();
+  let amount = value.trim();
+  if (!/[.,]\d{1,2}$/.test(amount)) {
+    const decimals = trimmed.match(/\d([.,]\d{2})(?!.*\d)/);
+    if (decimals) amount = `${amount}${decimals[1]}`;
+  }
+  const suffix = trimmed.match(/[\d.,]+(\s?)([^\d\s.,]+)$/);
+  if (suffix) return `${amount}${suffix[1]}${suffix[2]}`;
+  const prefix = trimmed.match(/^([^\d\s.,]+)(\s?)[\d.,]/);
+  if (prefix) return `${prefix[1]}${prefix[2]}${amount}`;
+  return `${amount} €`;
+}
+
 export function buildCampaignUrl(params: {
   product: CampaignUrlProduct;
   listing: CampaignUrlListing;
