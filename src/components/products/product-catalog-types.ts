@@ -98,6 +98,75 @@ export const defaultSourceForm: SourceFormState = {
   defaultPrice: "",
 };
 
+/** One parsed line of the bulk source paste. */
+export interface BulkSourceRow {
+  /** The raw input line — round-tripped back into the textarea on failure. */
+  line: string;
+  /** Final source URL (scheme + sitemap path applied). Null = unparseable. */
+  url: string | null;
+  hostname: string | null;
+  /** Detected or explicit ISO country code, "" when nothing matched. */
+  countryCode: string;
+}
+
+/** 2-letter TLDs that aren't usable as a country (or need remapping). */
+const TLD_NOT_A_COUNTRY = new Set(["eu"]);
+const TLD_COUNTRY_REMAP: Record<string, string> = { UK: "GB" };
+
+function detectCountry(url: URL): string {
+  const labels = url.hostname.toLowerCase().split(".");
+  const tld = labels[labels.length - 1];
+  if (tld.length === 2 && !TLD_NOT_A_COUNTRY.has(tld)) {
+    const code = tld.toUpperCase();
+    return TLD_COUNTRY_REMAP[code] ?? code;
+  }
+  // Country shops on a generic TLD: si.shop.com or shop.com/si/…
+  const sub = labels[0];
+  if (labels.length > 2 && /^[a-z]{2}$/.test(sub) && sub !== "ww") {
+    return sub.toUpperCase();
+  }
+  const segment = url.pathname.split("/").filter(Boolean)[0] ?? "";
+  if (/^[a-z]{2}$/i.test(segment)) return segment.toUpperCase();
+  return "";
+}
+
+/**
+ * Parse the bulk-add textarea: one shop per line, either a bare domain or a
+ * full URL, with an optional explicit country after it ("superzebra.com SI").
+ * The country is otherwise detected from the ccTLD (".si" → SI, ".uk" → GB),
+ * a 2-letter subdomain, or a 2-letter first path segment. Bare domains get
+ * the shared sitemap path appended.
+ */
+export function parseBulkSourceLines(
+  text: string,
+  sitemapPath: string
+): BulkSourceRow[] {
+  const path = sitemapPath.trim()
+    ? `/${sitemapPath.trim().replace(/^\/+/, "")}`
+    : "";
+  return linesToArray(text).map((line) => {
+    const [rawUrl, ...rest] = line.split(/\s+/);
+    const explicit = rest.find((token) => /^[a-z]{2}$/i.test(token));
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl)
+      ? rawUrl
+      : `https://${rawUrl}`;
+    let url: URL;
+    try {
+      url = new URL(withScheme);
+      if (!/^https?:$/.test(url.protocol) || !url.hostname.includes(".")) {
+        throw new Error("not a web URL");
+      }
+    } catch {
+      return { line, url: null, hostname: null, countryCode: "" };
+    }
+    const countryCode = explicit?.toUpperCase() ?? detectCountry(url);
+    if (path && (url.pathname === "/" || !url.pathname) && !url.search) {
+      url.pathname = path;
+    }
+    return { line, url: url.toString(), hostname: url.hostname, countryCode };
+  });
+}
+
 /** Parse "KEY=value" lines into a record, transforming each key. */
 export function parseTemplateOverrides(
   value: string,

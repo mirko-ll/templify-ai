@@ -40,7 +40,10 @@
       "PowerShell($f = Get-Content \"prisma\\\\schema.prisma\" -Raw; $b = Get-Content \"C:\\\\Users\\\\User\\\\Desktop\\\\Dev Projects\\\\templaito-backend\\\\prisma\\\\schema.prisma\" -Raw; \"frontend len: $\\($f.Length\\)\"; \"backend len: $\\($b.Length\\)\"; \"identical: $\\($f -eq $b\\)\"; Select-String -Path \"C:\\\\Users\\\\User\\\\Desktop\\\\Dev Projects\\\\templaito-backend\\\\prisma\\\\schema.prisma\" -Pattern \"model CampaignPlanItem|model CampaignPlan |generator|datasource\" | ForEach-Object { $_.LineNumber.ToString\\(\\) + \": \" + $_.Line.Trim\\(\\) })",
       "PowerShell(Copy-Item *)",
       "PowerShell(npx prisma db push 2>$null; npx prisma generate 2>$null)",
-      "PowerShell(npx -y tsx scripts/test-import-dryrun.mts)"
+      "PowerShell(npx -y tsx scripts/test-import-dryrun.mts)",
+      "PowerShell(npx tsx scripts/test-bulk-parse.mts)",
+      "PowerShell(Set-Content *)",
+      "PowerShell(Move-Item *)"
     ],
     "deny": [],
     "ask": [],

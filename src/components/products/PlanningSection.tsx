@@ -60,6 +60,7 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
   const [sourceForm, setSourceForm] = useState<SourceFormState>(defaultSourceForm);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [creatingSource, setCreatingSource] = useState(false);
+  const [creatingBulk, setCreatingBulk] = useState(false);
   const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [removingSourceId, setRemovingSourceId] = useState<string | null>(null);
@@ -151,6 +152,78 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
       );
     } finally {
       setCreatingSource(false);
+    }
+  };
+
+  /**
+   * Create one source per pasted shop, all sharing the form's name (suffixed
+   * with the country) and campaign-link options. Returns the lines that
+   * failed so the form can keep them in the textarea for a retry.
+   */
+  const createSourcesBulk = async (
+    rows: Array<{ line: string; url: string; countryCode: string | null }>
+  ): Promise<string[]> => {
+    setCreatingBulk(true);
+    const sharedName = sourceForm.name.trim();
+    const config = {
+      campaignUrlTemplate: sourceForm.campaignUrlTemplate.trim(),
+      countryCampaignUrlTemplates: parseTemplateOverrides(
+        sourceForm.countryCampaignUrlTemplates,
+        (key) => key.toUpperCase()
+      ),
+      domainCampaignUrlTemplates: parseTemplateOverrides(
+        sourceForm.domainCampaignUrlTemplates,
+        (key) => key.toLowerCase().replace(/^www\./, "")
+      ),
+      defaultPrice: sourceForm.defaultPrice.trim(),
+    };
+    try {
+      const results = await Promise.allSettled(
+        rows.map(async (row) => {
+          const response = await fetch(`/api/clients/${clientId}/product-sources`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: sharedName
+                ? `${sharedName}${row.countryCode ? ` ${row.countryCode}` : ""}`
+                : undefined,
+              url: row.url,
+              countryCode: row.countryCode ?? undefined,
+              config,
+            }),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload?.error || "Failed to add source");
+          }
+        })
+      );
+      const failed = rows.filter(
+        (_, index) => results[index].status === "rejected"
+      );
+      const added = rows.length - failed.length;
+      if (added > 0) {
+        toast.success(
+          `${added} ${added === 1 ? "source" : "sources"} added`,
+          failed.length > 0
+            ? `${failed.length} failed — they stayed in the list for a retry.`
+            : undefined
+        );
+        await loadSources().catch(() => null);
+      }
+      if (failed.length > 0) {
+        const firstError = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected"
+        )?.reason;
+        toast.error(
+          `${failed.length} ${failed.length === 1 ? "source" : "sources"} failed`,
+          firstError instanceof Error ? firstError.message : undefined
+        );
+      }
+      return failed.map((row) => row.line);
+    } finally {
+      setCreatingBulk(false);
     }
   };
 
@@ -420,7 +493,9 @@ export default function PlanningSection({ clientId }: PlanningSectionProps) {
               showAdvanced={showAdvanced}
               onToggleAdvanced={() => setShowAdvanced((prev) => !prev)}
               creating={creatingSource}
+              bulkCreating={creatingBulk}
               onSubmit={createSource}
+              onBulkSubmit={createSourcesBulk}
             />
 
             <ProductSourceList
