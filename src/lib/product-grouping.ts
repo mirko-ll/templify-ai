@@ -86,6 +86,46 @@ function isWordAfterBundle(tokens: string[], index: number): boolean {
   return /^\p{L}+$/u.test(word) && OFFER_BUNDLE_RE.test(cleanToken(tokens[index - 1]));
 }
 
+/** Letters-only length of a cleaned token. */
+function letterCount(token: string): number {
+  return cleanToken(token).match(/\p{L}/gu)?.length ?? 0;
+}
+
+/** True when the cleaned token has no lowercase letters (caps words, digits, 1+1). */
+function hasNoLowercase(token: string): boolean {
+  const cleaned = cleanToken(token);
+  return cleaned.length > 0 && !/\p{Ll}/u.test(cleaned);
+}
+
+/** Brand-like: an all-caps coined word of ≥3 letters, e.g. GRITSY, BULBCAM. */
+function isBrandToken(token: string): boolean {
+  return hasNoLowercase(token) && letterCount(token) >= 3;
+}
+
+/**
+ * Pipe-less titles are localized sentences ending with the invented offer code:
+ *   "Recortadora eléctrica de hoja en T GRITSY"          (ES)
+ *   "Elektrinis skustuvas su T formos peiliukais GRITSY" (LT)
+ * The sentence differs per country but the trailing code run doesn't — take it
+ * (plus variant suffixes like LP or 1+1) as the key. Returns null when the tail
+ * isn't clearly a code, so callers keep the full-title fallback. Must only be
+ * called for mixed-case titles — in an all-caps title every token looks brandy.
+ */
+function extractTrailingOfferCode(tokens: string[]): string | null {
+  let index = tokens.length - 1;
+  // Walk over trailing variant suffixes (LP, 1+1, 4K…) to the code word itself.
+  while (index >= 0 && hasNoLowercase(tokens[index]) && !isBrandToken(tokens[index])) {
+    index--;
+  }
+  if (index < 0 || !isBrandToken(tokens[index])) return null;
+  // Multi-word codes ("PEN POLISH LP") — extend over adjacent all-caps words.
+  let start = index;
+  while (start > 0 && isBrandToken(tokens[start - 1])) {
+    start--;
+  }
+  return tokens.slice(start).join(" ");
+}
+
 /**
  * Derive the human-readable offer slug from a product title.
  *
@@ -118,6 +158,14 @@ export function extractProductGroupSlug(title: string): string {
       isWordAfterBundle(tokens, tokens.length - 1))
   ) {
     tokens.pop();
+  }
+
+  // Pipe-less mixed-case titles: the localized sentence differs per country but
+  // the trailing offer code doesn't — group on the code when one is present.
+  // (All-caps titles keep the full-title key: every token there looks brandy.)
+  if (pipeIndex < 0 && tokens.some((token) => /\p{Ll}/u.test(token))) {
+    const code = extractTrailingOfferCode(tokens);
+    if (code) return code;
   }
 
   return tokens.join(" ");

@@ -44,7 +44,8 @@
       "PowerShell(npx tsx scripts/test-bulk-parse.mts)",
       "PowerShell(Set-Content *)",
       "PowerShell(Move-Item *)",
-      "PowerShell(npx tsx scripts/test-grouping.ts)"
+      "PowerShell(npx tsx scripts/test-grouping.ts)",
+      "PowerShell(npx tsx scripts/test-grouping2.ts)"
     ],
     "deny": [],
     "ask": [],
