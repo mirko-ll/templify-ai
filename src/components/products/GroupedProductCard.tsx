@@ -1,9 +1,10 @@
 "use client";
 
-import { CheckIcon, CubeIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, CubeIcon, GlobeAltIcon, TagIcon } from "@heroicons/react/24/outline";
 import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
+  categoryLabel,
   flagEmoji,
   statusLabel,
   type ProductGroup,
@@ -83,6 +84,12 @@ export function GroupedProductCard({
             className="shadow-soft"
           />
         </div>
+        {group.category && (
+          <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full border border-white/25 bg-ink/65 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-soft backdrop-blur-sm">
+            <TagIcon className="h-3 w-3" />
+            {categoryLabel(group.category)}
+          </span>
+        )}
       </div>
 
       {/* Body */}

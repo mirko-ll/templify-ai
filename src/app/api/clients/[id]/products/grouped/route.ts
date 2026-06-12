@@ -80,6 +80,8 @@ export async function GET(
   const status = searchParams.get("status")?.trim().toUpperCase();
   const country = searchParams.get("country")?.trim().toUpperCase();
   const availability = searchParams.get("availability")?.trim().toUpperCase();
+  // Categories are stored lowercased at sync time.
+  const category = searchParams.get("category")?.trim().toLowerCase();
   const paginated = searchParams.has("page");
   const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(
@@ -109,6 +111,9 @@ export async function GET(
           ],
         }
       : {}),
+    // A group matches when any member product carries the category (offers
+    // inherit their main product's category at sync time).
+    ...(category ? { category } : {}),
     ...(Object.keys(listingSome).length > 0 ? { listings: { some: listingSome } } : {}),
   };
 
@@ -153,6 +158,7 @@ export async function GET(
     normalizedTitle: product.normalizedTitle,
     description: product.description,
     bestImageUrl: product.bestImageUrl,
+    category: product.category,
     status: product.status,
     updatedAt: product.updatedAt?.toISOString() ?? null,
     lastSeenAt: product.lastSeenAt?.toISOString() ?? null,
@@ -191,13 +197,20 @@ export async function GET(
     .map((key) => byKey.get(key))
     .filter((group): group is ProductGroup => Boolean(group));
 
-  // Facets: every country the client has a listing in + per-status product counts.
-  const [countryRows, statusCounts] = await Promise.all([
+  // Facets: every country the client has a listing in, every category the
+  // catalog knows + per-status product counts.
+  const [countryRows, categoryRows, statusCounts] = await Promise.all([
     prisma.productListing.findMany({
       where: { clientId: id, countryCode: { not: null } },
       distinct: ["countryCode"],
       select: { countryCode: true },
       orderBy: { countryCode: "asc" },
+    }),
+    prisma.product.findMany({
+      where: { clientId: id, category: { not: null } },
+      distinct: ["category"],
+      select: { category: true },
+      orderBy: { category: "asc" },
     }),
     prisma.product.groupBy({
       by: ["status"],
@@ -215,6 +228,9 @@ export async function GET(
       countries: countryRows
         .map((row) => row.countryCode)
         .filter((code): code is string => Boolean(code)),
+      categories: categoryRows
+        .map((row) => row.category)
+        .filter((value): value is string => Boolean(value)),
       counts: statusCounts.reduce<Record<string, number>>((acc, row) => {
         acc[row.status] = row._count._all;
         return acc;

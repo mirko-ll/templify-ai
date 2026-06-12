@@ -1,6 +1,7 @@
 import type { ProductGroup } from "@/lib/product-grouping";
 
 export type { ProductGroup };
+export { categoryLabel } from "@/lib/product-grouping";
 
 export interface GroupedResponse {
   groups: ProductGroup[];
@@ -9,6 +10,7 @@ export interface GroupedResponse {
   pageSize: number;
   facets: {
     countries: string[];
+    categories: string[];
     counts: Record<string, number>;
   };
 }

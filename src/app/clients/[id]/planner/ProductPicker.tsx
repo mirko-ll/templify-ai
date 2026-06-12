@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { CheckIcon, MagnifyingGlassIcon, TrophyIcon } from "@heroicons/react/24/outline";
+import {
+  CheckIcon,
+  MagnifyingGlassIcon,
+  TagIcon,
+  TrophyIcon,
+} from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
+import { categoryLabel } from "@/lib/product-grouping";
 import {
   availableCountries,
   formatMetric,
@@ -26,12 +32,23 @@ interface ProductPickerProps {
 }
 
 const PAGE_SIZE = 24;
+/** Start fetching the next page when the list is scrolled within this of the end. */
+const SCROLL_THRESHOLD_PX = 96;
+
+function buildSearchParams(page: number, search: string, category: string) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (search) params.set("search", search);
+  if (category) params.set("category", category);
+  return params;
+}
 
 /**
  * Server-backed product search for the day editor. Queries the grouped catalog
  * endpoint (debounced) so the planner never has to load the whole catalog —
  * results reflect the same SI-preferred grouping and slug/title/description
- * search as the Products tab.
+ * search as the Products tab. Further pages load as the list is scrolled, so a
+ * whole category can be browsed without refining the search. Typing also
+ * surfaces matching categories as one-click filter shortcuts.
  */
 export function ProductPicker({
   selectedKey,
@@ -47,43 +64,120 @@ export function ProductPicker({
 
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [results, setResults] = useState<ProductGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const listRef = useRef<HTMLDivElement>(null);
+  // Monotonic id so a stale response can never clobber a newer query's results.
+  const fetchIdRef = useRef(0);
+  const pageRef = useRef(1);
+  // Synchronous re-entry guard — scroll events fire faster than state settles.
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Reset and load the first page whenever the query or category changes.
   useEffect(() => {
     if (!clientId) return;
-    let cancelled = false;
+    const fetchId = ++fetchIdRef.current;
+    pageRef.current = 1;
     setLoading(true);
-    const search = new URLSearchParams({ page: "1", pageSize: String(PAGE_SIZE) });
-    if (debounced) search.set("search", debounced);
-    fetch(`/api/clients/${clientId}/products/grouped?${search.toString()}`)
+    fetch(
+      `/api/clients/${clientId}/products/grouped?${buildSearchParams(1, debounced, category)}`
+    )
       .then((response) => (response.ok ? response.json() : { groups: [], total: 0 }))
       .then((data) => {
-        if (cancelled) return;
+        if (fetchId !== fetchIdRef.current) return;
         setResults(Array.isArray(data.groups) ? data.groups : []);
         setTotal(data.total ?? 0);
+        // Facets are client-wide (not narrowed by the current filters), so the
+        // chip rail stays stable while searching.
+        if (Array.isArray(data.facets?.categories)) {
+          setCategories(data.facets.categories);
+        }
+        listRef.current?.scrollTo({ top: 0 });
       })
       .catch(() => {
-        if (!cancelled) {
-          setResults([]);
-          setTotal(0);
-        }
+        if (fetchId !== fetchIdRef.current) return;
+        setResults([]);
+        setTotal(0);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (fetchId === fetchIdRef.current) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [clientId, debounced]);
+  }, [clientId, debounced, category]);
 
-  const overflow = total - results.length;
+  const hasMore = results.length < total;
+
+  const loadMore = () => {
+    if (!clientId || loading || loadingMoreRef.current || !hasMore) return;
+    const fetchId = fetchIdRef.current;
+    const nextPage = pageRef.current + 1;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    fetch(
+      `/api/clients/${clientId}/products/grouped?${buildSearchParams(nextPage, debounced, category)}`
+    )
+      .then((response) => (response.ok ? response.json() : { groups: [] }))
+      .then((data) => {
+        if (fetchId !== fetchIdRef.current) return;
+        pageRef.current = nextPage;
+        const incoming: ProductGroup[] = Array.isArray(data.groups) ? data.groups : [];
+        setResults((prev) => {
+          const seen = new Set(prev.map((group) => group.key));
+          return [...prev, ...incoming.filter((group) => !seen.has(group.key))];
+        });
+        if (typeof data.total === "number") setTotal(data.total);
+      })
+      .catch(() => {
+        // Keep what we have; the load-more row stays available to retry.
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+        if (fetchId === fetchIdRef.current) setLoadingMore(false);
+      });
+  };
+
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD_PX) {
+      loadMore();
+    }
+  };
+
+  // Categories matching the typed query — a shortcut past the chip rail.
+  const lowerQuery = debounced.toLowerCase();
+  const categorySuggestions =
+    lowerQuery && !category
+      ? categories
+          .filter(
+            (value) =>
+              value.includes(lowerQuery) ||
+              categoryLabel(value).toLowerCase().includes(lowerQuery)
+          )
+          .slice(0, 6)
+      : [];
+
+  const applyCategory = (value: string) => {
+    setCategory(value);
+    setQuery("");
+  };
+
+  const chipClass = (active: boolean) =>
+    cn(
+      "flex-shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+      active
+        ? "border-brand-300 bg-brand-50 text-brand-700"
+        : "border-line bg-surface text-muted hover:border-line-strong hover:text-ink"
+    );
 
   return (
     <div className="flex flex-col gap-2">
@@ -93,18 +187,61 @@ export function ProductPicker({
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, code or description…"
+          placeholder="Search by name, code, description or category…"
           className="h-10 w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
           autoFocus
         />
       </div>
 
-      <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+      {categories.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <TagIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted" aria-hidden />
+          <button type="button" onClick={() => setCategory("")} className={chipClass(category === "")}>
+            All
+          </button>
+          {categories.map((value) => {
+            const active = category === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setCategory(active ? "" : value)}
+                className={chipClass(active)}
+              >
+                {categoryLabel(value)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {categorySuggestions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-line bg-surface-muted/50 px-2.5 py-2">
+          <span className="text-[11px] font-medium text-muted">Categories:</span>
+          {categorySuggestions.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => applyCategory(value)}
+              className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-100"
+            >
+              <TagIcon className="h-3 w-3" />
+              {categoryLabel(value)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div ref={listRef} onScroll={handleScroll} className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
         {loading ? (
           <p className="px-1 py-6 text-center text-sm text-muted">Searching…</p>
         ) : results.length === 0 ? (
           <p className="px-1 py-6 text-center text-sm text-muted">
-            {debounced ? `No products match “${query}”.` : "No products yet."}
+            {debounced
+              ? `No products match “${query}”${category ? ` in ${categoryLabel(category)}` : ""}.`
+              : category
+                ? `No products in ${categoryLabel(category)}.`
+                : "No products yet."}
           </p>
         ) : (
           results.map((group) => {
@@ -152,6 +289,12 @@ export function ProductPicker({
                         #{rank}
                       </span>
                     )}
+                    {group.category && (
+                      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                        <TagIcon className="h-3 w-3" />
+                        {categoryLabel(group.category)}
+                      </span>
+                    )}
                   </div>
                   <p className="truncate text-xs text-muted">{group.title}</p>
                   <p
@@ -189,10 +332,17 @@ export function ProductPicker({
           })
         )}
 
-        {!loading && overflow > 0 && (
-          <p className="px-1 pt-1 text-center text-[11px] text-muted">
-            Showing first {results.length} of {total} — refine your search to narrow.
-          </p>
+        {!loading && results.length > 0 && hasMore && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line px-1 py-2 text-[11px] font-medium text-muted transition-colors hover:border-line-strong hover:text-ink disabled:cursor-default"
+          >
+            {loadingMore
+              ? "Loading more…"
+              : `Showing ${results.length} of ${total} — scroll or click to load more`}
+          </button>
         )}
       </div>
     </div>

@@ -12,6 +12,7 @@ import {
   ArrowTopRightOnSquareIcon,
   CalendarDaysIcon,
   CubeIcon,
+  TagIcon,
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { pickCanonicalListing } from "@/lib/product-grouping";
 import { formatDate } from "./product-catalog-types";
 import {
+  categoryLabel,
   flagEmoji,
   listingPrice,
   statusLabel,
@@ -108,6 +110,12 @@ export function ProductDetailDrawer({
                         status={group.status}
                         label={statusLabel(group.status)}
                       />
+                      {group.category && (
+                        <Badge variant="neutral" className="gap-1 text-[10px]">
+                          <TagIcon className="h-3 w-3" />
+                          {categoryLabel(group.category)}
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-muted">
                       {group.title}

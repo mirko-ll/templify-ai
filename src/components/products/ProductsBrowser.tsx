@@ -25,6 +25,7 @@ import { ProductDetailDrawer } from "./ProductDetailDrawer";
 import {
   SORT_OPTIONS,
   STATUS_FILTERS,
+  categoryLabel,
   flagEmoji,
   type GroupedResponse,
   type ProductGroup,
@@ -35,7 +36,11 @@ interface ProductsBrowserProps {
 }
 
 const PAGE_SIZE = 24;
-const EMPTY_FACETS = { countries: [] as string[], counts: {} as Record<string, number> };
+const EMPTY_FACETS = {
+  countries: [] as string[],
+  categories: [] as string[],
+  counts: {} as Record<string, number>,
+};
 
 /** Full product catalog: grouped offers with filters, pagination and detail. */
 export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
@@ -52,6 +57,7 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [country, setCountry] = useState("");
+  const [category, setCategory] = useState("");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
 
@@ -81,6 +87,7 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (country) params.set("country", country);
+      if (category) params.set("category", category);
 
       const response = await fetch(
         `/api/clients/${clientId}/products/grouped?${params.toString()}`
@@ -104,7 +111,7 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
     } finally {
       setLoading(false);
     }
-  }, [clientId, debouncedSearch, status, country, sort, page]);
+  }, [clientId, debouncedSearch, status, country, category, sort, page]);
 
   useEffect(() => {
     load();
@@ -122,6 +129,17 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
       })),
     ],
     [facets.countries]
+  );
+
+  const categoryOptions = useMemo(
+    () => [
+      { value: "", label: "All categories" },
+      ...facets.categories.map((value) => ({
+        value,
+        label: categoryLabel(value),
+      })),
+    ],
+    [facets.categories]
   );
 
   const statusCount = (value: string) => {
@@ -270,7 +288,16 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
                 className="h-10 w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
               />
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              <CustomSelect
+                className="w-44"
+                value={category}
+                onChange={(value) => {
+                  setCategory(value);
+                  setPage(1);
+                }}
+                options={categoryOptions}
+              />
               <CustomSelect
                 className="w-44"
                 value={country}
@@ -372,7 +399,7 @@ export default function ProductsBrowser({ clientId }: ProductsBrowserProps) {
             icon={<CubeIcon className="h-6 w-6" />}
             title="No products match"
             description={
-              debouncedSearch || country || status !== "ALL"
+              debouncedSearch || country || category || status !== "ALL"
                 ? "Try clearing filters or searching for something else."
                 : "Synced products will appear here once a source has been synced."
             }

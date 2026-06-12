@@ -345,6 +345,7 @@ model Product {
   title           String
   normalizedTitle String
   groupKey        String?
+  category        String?
   description     String?       @db.Text
   canonicalUrl    String?       @db.Text
   bestImageUrl    String?       @db.Text
@@ -365,6 +366,7 @@ model Product {
   @@index([status])
   @@index([normalizedTitle])
   @@index([clientId, groupKey])
+  @@index([clientId, category])
 }
 
 model ProductListing {
@@ -620,6 +622,8 @@ enum ProductSyncEventType {
   UPDATED
   MISSING
   FAILED
+  ARCHIVED
+  RESTORED
 }
 
 enum CampaignPlanMode {

@@ -25,6 +25,8 @@ export interface ProductGroup {
   title: string;
   description: string | null;
   bestImageUrl: string | null;
+  /** Shop category (lowercased), e.g. "summer" — present on groups from the grouped API. */
+  category?: string | null;
   images: string[];
   productIds: string[];
   countries: string[];

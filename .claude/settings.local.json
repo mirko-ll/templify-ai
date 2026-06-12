@@ -52,7 +52,9 @@
       "PowerShell(npx tsx scripts/test-format.mts)",
       "PowerShell(node scripts/inspect-latest.mjs)",
       "PowerShell(node scripts/inspect-urls.mjs)",
-      "PowerShell(npx tsx scripts/test-localize.mts)"
+      "PowerShell(npx tsx scripts/test-localize.mts)",
+      "PowerShell($response = Invoke-WebRequest -Uri \"https://vigoshop.si/izdelek/viseci-sopek-orhidej-hangrose/\" -UserAgent \"Mozilla/5.0 \\(compatible; TemplaitoProductSync/1.0\\)\" -UseBasicParsing; $html = $response.Content; $matches2 = [regex]::Matches\\($html, \".{120}\\(dataLayer|DataLayer|category|categories\\).{200}\"\\); $matches2 | Select-Object -First 12 | ForEach-Object { $_.Value; \"`n---`n\" })",
+      "PowerShell(Remove-Item *)"
     ],
     "deny": [],
     "ask": [],

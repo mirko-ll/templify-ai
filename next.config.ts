@@ -50,6 +50,37 @@ if (
       console.error('[CRON] Failed to push scheduled newsletters:', error);
     }
   });
+
+  // Nightly product catalog sync for every client at 03:00 (server time).
+  // Incremental: only pages whose sitemap lastmod changed are re-scraped; it
+  // also refreshes categories and archives/restores dead/revived product pages.
+  // Full re-verification happens on the sync's rolling 7-day window, so no
+  // separate force run is needed.
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      const response = await fetch(
+        `${process.env.TEMPLAITO_BACKEND_URL}/product-sources/sync-all-clients`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.TEMPLAITO_SERVICE_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`[CRON] Nightly product sync failed with status ${response.status}`);
+      } else {
+        const data = await response.json();
+        console.log(
+          `[CRON] Nightly product sync started: ${data.message} (${data.clientCount} clients)`
+        );
+      }
+    } catch (error) {
+      console.error('[CRON] Failed to start nightly product sync:', error);
+    }
+  });
 }
 
 export default config;

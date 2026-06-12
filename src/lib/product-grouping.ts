@@ -71,6 +71,17 @@ function isFreeWord(token: string): boolean {
   return FREE_WORDS.has(cleanToken(token).toLowerCase());
 }
 
+/**
+ * Some languages write the marker as two words ("BEZ MAKSAS", "ZA DARMO") while
+ * the dictionary stores the joined form ("bezmaksas", "zadarmo") — match the
+ * pair by joining it.
+ */
+function isFreeWordPair(first: string, second: string): boolean {
+  return FREE_WORDS.has(
+    cleanToken(first).toLowerCase() + cleanToken(second).toLowerCase()
+  );
+}
+
 function isNonLatinWord(token: string): boolean {
   return NON_LATIN_RE.test(token);
 }
@@ -151,13 +162,21 @@ export function extractProductGroupSlug(title: string): string {
   // Drop trailing localized "free" markers — known Latin words, non-Latin
   // tokens, or any word directly after a "1+1"-style bundle (the language-
   // agnostic backstop) — always keeping at least the first token.
-  while (
-    tokens.length > 1 &&
-    (isFreeWord(tokens[tokens.length - 1]) ||
-      isNonLatinWord(tokens[tokens.length - 1]) ||
-      isWordAfterBundle(tokens, tokens.length - 1))
-  ) {
-    tokens.pop();
+  while (tokens.length > 1) {
+    const last = tokens.length - 1;
+    if (
+      isFreeWord(tokens[last]) ||
+      isNonLatinWord(tokens[last]) ||
+      isWordAfterBundle(tokens, last)
+    ) {
+      tokens.pop();
+    } else if (last >= 2 && isFreeWordPair(tokens[last - 1], tokens[last])) {
+      // Two-word marker ("… 1+1 BEZ MAKSAS") — drop both halves at once.
+      tokens.pop();
+      tokens.pop();
+    } else {
+      break;
+    }
   }
 
   // Pipe-less mixed-case titles: the localized sentence differs per country but
@@ -174,6 +193,14 @@ export function extractProductGroupSlug(title: string): string {
 /** Normalize a slug into a stable matching key (uppercased, whitespace-collapsed). */
 export function normalizeGroupKey(slug: string): string {
   return slug.replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+/** Display label for a stored (lowercased) category, e.g. "summer" → "Summer". */
+export function categoryLabel(category: string): string {
+  return category
+    .split(/[\s-]+/)
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(" ");
 }
 
 /** The grouping key for a product title. */
@@ -229,6 +256,8 @@ export interface GroupableProduct {
   normalizedTitle: string;
   description: string | null;
   bestImageUrl: string | null;
+  /** Shop category (lowercased), scraped or inherited from the main product. */
+  category?: string | null;
   status: string;
   updatedAt?: string | null;
   lastSeenAt?: string | null;
@@ -245,6 +274,8 @@ export interface ProductGroup {
   title: string;
   description: string | null;
   bestImageUrl: string | null;
+  /** Shop category (lowercased) — first member that carries one. */
+  category: string | null;
   /** Most relevant status across members (ACTIVE > POSSIBLY_UNAVAILABLE > ARCHIVED). */
   status: string;
   /** Most recent member updatedAt / lastSeenAt (ISO), for "recently synced" sorting. */
@@ -336,6 +367,7 @@ export function groupProducts(
         title: product.title,
         description: null,
         bestImageUrl: product.bestImageUrl,
+        category: product.category ?? null,
         status: product.status,
         updatedAt: product.updatedAt ?? null,
         lastSeenAt: product.lastSeenAt ?? null,
@@ -371,6 +403,11 @@ export function groupProducts(
     // Fill a missing main image from any member that has one.
     if (!group.bestImageUrl && product.bestImageUrl) {
       group.bestImageUrl = product.bestImageUrl;
+    }
+
+    // Fill a missing category from any member that has one.
+    if (!group.category && product.category) {
+      group.category = product.category;
     }
 
     const seenImages = new Set(group.images);
