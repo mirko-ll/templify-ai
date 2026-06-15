@@ -3,16 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
+  ArrowTopRightOnSquareIcon,
   CheckIcon,
+  CubeIcon,
   MagnifyingGlassIcon,
+  PhotoIcon,
   TagIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
 import { categoryLabel } from "@/lib/product-grouping";
+import { ProductMediaViewer } from "./ProductMediaViewer";
 import {
   availableCountries,
   formatMetric,
+  groupPreviewUrl,
   type PerformanceEntry,
   type ProductGroup,
 } from "./planner-types";
@@ -70,6 +75,9 @@ export function ProductPicker({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Media lightbox — kept mounted (with `open`) so it can animate out cleanly.
+  const [viewerGroup, setViewerGroup] = useState<ProductGroup | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   // Monotonic id so a stale response can never clobber a newer query's results.
@@ -171,6 +179,11 @@ export function ProductPicker({
     setQuery("");
   };
 
+  const openViewer = (group: ProductGroup) => {
+    setViewerGroup(group);
+    setViewerOpen(true);
+  };
+
   const chipClass = (active: boolean) =>
     cn(
       "flex-shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
@@ -250,84 +263,127 @@ export function ProductPicker({
             const countries = availableCountries(group, eligible);
             const perf = performance?.get(group.key) ?? null;
             const rank = ranks?.get(group.key) ?? null;
+            const imageCount = group.images.length;
+            const previewHref = groupPreviewUrl(group);
             return (
-              <button
+              <div
                 key={group.key}
-                type="button"
-                disabled={isDisabled}
-                onClick={() => onSelect(group)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-colors",
+                  "flex items-center gap-3 rounded-xl border p-2.5 transition-colors",
                   isDisabled
-                    ? "cursor-not-allowed border-line bg-surface-muted/60 opacity-60"
+                    ? "border-line bg-surface-muted/60"
                     : isSelected
                       ? "border-brand-300 bg-brand-50"
                       : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted"
                 )}
               >
-                <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-surface-muted">
-                  {group.bestImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={group.bestImageUrl}
-                      alt={group.slug}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-ink">
-                      {group.slug}
-                    </p>
-                    {rank !== null && rank <= 10 && (
-                      <span
-                        className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
-                        title={`#${rank} by quantity sold${performanceLabel ? ` in ${performanceLabel}` : ""}`}
-                      >
-                        <TrophyIcon className="h-3 w-3" />
-                        #{rank}
-                      </span>
+                <button
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => onSelect(group)}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center gap-3 text-left",
+                    isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  )}
+                >
+                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-surface-muted">
+                    {group.bestImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={group.bestImageUrl}
+                        alt={group.slug}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <CubeIcon className="absolute inset-0 m-auto h-5 w-5 text-muted" />
                     )}
-                    {group.category && (
-                      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
-                        <TagIcon className="h-3 w-3" />
-                        {categoryLabel(group.category)}
+                    {imageCount > 1 && (
+                      <span className="absolute bottom-0.5 right-0.5 inline-flex items-center gap-0.5 rounded-md bg-ink/70 px-1 py-px text-[9px] font-semibold text-white backdrop-blur-sm">
+                        <PhotoIcon className="h-2.5 w-2.5" />
+                        {imageCount}
                       </span>
                     )}
                   </div>
-                  <p className="truncate text-xs text-muted">{group.title}</p>
-                  <p
-                    className={cn(
-                      "mt-0.5 text-[11px] font-medium",
-                      isDisabled
-                        ? "text-muted"
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-ink">
+                        {group.slug}
+                      </p>
+                      {rank !== null && rank <= 10 && (
+                        <span
+                          className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                          title={`#${rank} by quantity sold${performanceLabel ? ` in ${performanceLabel}` : ""}`}
+                        >
+                          <TrophyIcon className="h-3 w-3" />
+                          #{rank}
+                        </span>
+                      )}
+                      {group.category && (
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                          <TagIcon className="h-3 w-3" />
+                          {categoryLabel(group.category)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted">{group.title}</p>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-[11px] font-medium",
+                        isDisabled
+                          ? "text-muted"
+                          : countries.length > 0
+                            ? "text-brand-600"
+                            : "text-amber-600"
+                      )}
+                    >
+                      {isDisabled
+                        ? "Already scheduled this day"
                         : countries.length > 0
-                          ? "text-brand-600"
-                          : "text-amber-600"
-                    )}
-                  >
-                    {isDisabled
-                      ? "Already scheduled this day"
-                      : countries.length > 0
-                        ? `${countries.length} active ${
-                            countries.length === 1 ? "country" : "countries"
-                          }: ${countries.join(", ")}`
-                        : "No active mailing-list country"}
-                  </p>
-                  {perf && (
-                    <p className="mt-0.5 truncate text-[11px] text-muted">
-                      {performanceLabel ? `${performanceLabel}: ` : ""}
-                      {formatMetric("quantity", perf.quantity)} sold ·{" "}
-                      {formatMetric("revenue", perf.revenue)} ·{" "}
-                      {formatMetric("profit", perf.profit)} profit
+                          ? `${countries.length} active ${
+                              countries.length === 1 ? "country" : "countries"
+                            }: ${countries.join(", ")}`
+                          : "No active mailing-list country"}
                     </p>
+                    {perf && (
+                      <p className="mt-0.5 truncate text-[11px] text-muted">
+                        {performanceLabel ? `${performanceLabel}: ` : ""}
+                        {formatMetric("quantity", perf.quantity)} sold ·{" "}
+                        {formatMetric("revenue", perf.revenue)} ·{" "}
+                        {formatMetric("profit", perf.profit)} profit
+                      </p>
+                    )}
+                  </div>
+                </button>
+
+                <div className="flex flex-shrink-0 items-center gap-1.5">
+                  {isSelected && !isDisabled && (
+                    <CheckIcon className="h-5 w-5 text-brand-600" />
+                  )}
+                  {imageCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openViewer(group)}
+                      aria-label={`View media for ${group.slug}`}
+                      title="View product media"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                    >
+                      <PhotoIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                  {previewHref && (
+                    <a
+                      href={previewHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open preview page for ${group.slug}`}
+                      title="Open product preview page"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                    >
+                      <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                    </a>
                   )}
                 </div>
-                {isSelected && !isDisabled && (
-                  <CheckIcon className="h-5 w-5 flex-shrink-0 text-brand-600" />
-                )}
-              </button>
+              </div>
             );
           })
         )}
@@ -345,6 +401,13 @@ export function ProductPicker({
           </button>
         )}
       </div>
+
+      <ProductMediaViewer
+        group={viewerGroup}
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        onSelect={onSelect}
+      />
     </div>
   );
 }

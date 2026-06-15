@@ -54,7 +54,13 @@
       "PowerShell(node scripts/inspect-urls.mjs)",
       "PowerShell(npx tsx scripts/test-localize.mts)",
       "PowerShell($response = Invoke-WebRequest -Uri \"https://vigoshop.si/izdelek/viseci-sopek-orhidej-hangrose/\" -UserAgent \"Mozilla/5.0 \\(compatible; TemplaitoProductSync/1.0\\)\" -UseBasicParsing; $html = $response.Content; $matches2 = [regex]::Matches\\($html, \".{120}\\(dataLayer|DataLayer|category|categories\\).{200}\"\\); $matches2 | Select-Object -First 12 | ForEach-Object { $_.Value; \"`n---`n\" })",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 40)",
+      "PowerShell(npx eslint \"src/app/clients/[id]/planner/ProductPicker.tsx\" \"src/app/clients/[id]/planner/ProductMediaViewer.tsx\" \"src/app/clients/[id]/planner/planner-types.ts\" 2>&1 | Select-Object -First 40)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 30)",
+      "PowerShell(npx eslint \"src/app/clients/[id]/planner/DayProductForm.tsx\" 2>&1 | Select-Object -First 30)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20)",
+      "PowerShell(npx eslint \"src/app/clients/[id]/planner/DayEditor.tsx\" \"src/app/clients/[id]/planner/page.tsx\" \"src/app/api/clients/[id]/campaign-plans/[planId]/items/[itemId]/regenerate/route.ts\" 2>&1 | Select-Object -First 40)"
     ],
     "deny": [],
     "ask": [],

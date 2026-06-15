@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowPathIcon,
   ArrowPathRoundedSquareIcon,
   ArrowUturnLeftIcon,
   EyeIcon,
@@ -56,6 +57,8 @@ interface DayEditorProps {
   onPreviewCampaign: (campaignId: string, label: string) => void;
   /** Cancel a scheduled (not yet pushed) product so the day is editable again. */
   onUnschedule: (item: DayAssignment) => void;
+  /** Discard a scheduled product's campaign and generate a fresh one. */
+  onRegenerate: (item: DayAssignment) => void;
 }
 
 type AddMode = "product" | "resend";
@@ -140,6 +143,7 @@ function ProductRow({
   onRemove,
   onView,
   onUnschedule,
+  onRegenerate,
 }: {
   item: DayAssignment;
   defaults: PlannerDefaults;
@@ -150,6 +154,7 @@ function ProductRow({
   onRemove: () => void;
   onView: () => void;
   onUnschedule: () => void;
+  onRegenerate: () => void;
 }) {
   const locked = isLocked(item.status);
   const viewable = item.status === "SCHEDULED" && Boolean(item.campaignId);
@@ -230,6 +235,17 @@ function ProductRow({
             <EyeIcon className="h-4 w-4" />
           </button>
         )}
+        {viewable && !readOnly && !item.resend && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            aria-label="Regenerate campaign"
+            title="Regenerate — discard this email and generate a fresh one"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+          </button>
+        )}
         {viewable && !readOnly && (
           <button
             type="button"
@@ -302,6 +318,7 @@ export function DayEditor({
   onPreview,
   onPreviewCampaign,
   onUnschedule,
+  onRegenerate,
 }: DayEditorProps) {
   const [view, setView] = useState<"list" | "form">("list");
   const [mode, setMode] = useState<AddMode>("product");
@@ -461,6 +478,7 @@ export function DayEditor({
               onRemove={() => handleRemove(item)}
               onView={() => onPreview(item)}
               onUnschedule={() => onUnschedule(item)}
+              onRegenerate={() => onRegenerate(item)}
             />
           ))}
 

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
+  PhotoIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import CustomSelect from "@/components/ui/custom-select";
 import { cn } from "@/lib/cn";
 import { ProductPicker } from "./ProductPicker";
+import { ProductMediaViewer } from "./ProductMediaViewer";
 import { MailingListOverrides } from "./MailingListOverrides";
 import { VariableHint } from "./VariableHint";
 import {
@@ -21,6 +24,7 @@ import {
   availableCountries,
   formatMetric,
   formatTime12h,
+  groupPreviewUrl,
   localDayKey,
   localTimeKey,
   type CountryOption,
@@ -167,6 +171,7 @@ export function DayProductForm({
     price: string;
     usedAt: string | null;
   } | null>(null);
+  const [mediaOpen, setMediaOpen] = useState(false);
   const [error, setError] = useState("");
 
   const routeParams = useParams<{ id: string }>();
@@ -370,15 +375,51 @@ export function DayProductForm({
               );
             })()}
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setChangingProduct(true)}
-            leftIcon={<ArrowPathIcon className="h-4 w-4" />}
-          >
-            Change
-          </Button>
+          <div className="flex flex-shrink-0 items-center gap-1.5">
+            {group.images.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMediaOpen(true)}
+                aria-label="View product media"
+                title="View product media"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+              >
+                <PhotoIcon className="h-4 w-4" />
+              </button>
+            )}
+            {(() => {
+              const previewHref = groupPreviewUrl(group);
+              return previewHref ? (
+                <a
+                  href={previewHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open product preview page"
+                  title="Open product preview page"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-muted shadow-soft transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                >
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                </a>
+              ) : null;
+            })()}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setChangingProduct(true)}
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+            >
+              Change
+            </Button>
+          </div>
         </div>
+      )}
+
+      {group && (
+        <ProductMediaViewer
+          group={group}
+          open={mediaOpen}
+          onClose={() => setMediaOpen(false)}
+        />
       )}
 
       {/* Countries */}

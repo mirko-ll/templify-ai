@@ -326,6 +326,22 @@ export function availableCountries(
   return group.countries.filter((code) => eligible.has(code.toUpperCase()));
 }
 
+/**
+ * A representative product-page URL for previewing the offer in a new tab.
+ * Always prefers the Slovenian (SI) listing, then falls back to the first
+ * listing that actually carries a landing-page URL.
+ */
+export function groupPreviewUrl(group: ProductGroup): string | null {
+  const si = group.listings.find(
+    (listing) => listing.url && (listing.countryCode ?? "").toUpperCase() === "SI"
+  );
+  if (si) return si.url;
+  for (const listing of group.listings) {
+    if (listing.url) return listing.url;
+  }
+  return null;
+}
+
 const LOCKED: ItemStatus[] = ["QUEUED", "GENERATING", "SCHEDULED"];
 export function isLocked(status: ItemStatus): boolean {
   return LOCKED.includes(status);

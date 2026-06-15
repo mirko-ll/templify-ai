@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageLoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useConfirm } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { PlannerDefaultsPanel } from "./PlannerDefaults";
 import { MonthCalendar } from "./MonthCalendar";
@@ -128,6 +129,7 @@ export default function PlannerPage() {
   const params = useParams<{ id: string }>();
   const clientId = params?.id ?? "";
   const toast = useToast();
+  const { confirm, confirmDialog } = useConfirm();
 
   const todayKey = useMemo(() => localDayKey(new Date()), []);
   const now = useMemo(() => new Date(), []);
@@ -608,6 +610,39 @@ export default function PlannerPage() {
     }
   };
 
+  /** Discard a scheduled campaign and generate a fresh one for just this product. */
+  const handleRegenerate = async (item: DayAssignment) => {
+    if (!planId || !item.itemId) return;
+    const ok = await confirm({
+      title: `Regenerate ${item.group.slug}?`,
+      description:
+        "The current scheduled email is discarded and a brand-new one is generated and re-scheduled for the same send time. This can't be undone.",
+      confirmLabel: "Regenerate",
+      confirmVariant: "primary",
+    });
+    if (!ok) return;
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/campaign-plans/${planId}/items/${item.itemId}/regenerate`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to regenerate");
+      }
+      toast.success(
+        "Regenerating campaign",
+        "A fresh version is being created — it'll be scheduled again in a moment."
+      );
+      await refreshPlanItems();
+    } catch (err) {
+      toast.error(
+        "Couldn't regenerate",
+        err instanceof Error ? err.message : undefined
+      );
+    }
+  };
+
   const editingDayItems = editingDay
     ? assignmentsByDay.get(editingDay) ?? []
     : [];
@@ -828,7 +863,10 @@ export default function PlannerPage() {
           setPreview({ campaignId, label, heading: "Original campaign" })
         }
         onUnschedule={handleUnschedule}
+        onRegenerate={handleRegenerate}
       />
+
+      {confirmDialog}
 
       <CampaignPreviewModal
         open={preview !== null}
