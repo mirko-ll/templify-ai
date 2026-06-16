@@ -28,7 +28,7 @@ async function translateTextToEnglish(text: string | null | undefined) {
   try {
     const response = await openai.responses.create({
       model: "gpt-5.2",
-            input: `Translate the provided text to English. Return only the translated text with no additional commentary.
+      input: `Translate the provided text to English. Return only the translated text with no additional commentary.
 
 Text to translate:
 ${trimmed}`,
@@ -51,7 +51,7 @@ async function translateHtmlToEnglish(html: string) {
   try {
     const response = await openai.responses.create({
       model: "gpt-5.2",
-            input: `You are a professional email translator. Translate the provided HTML email into English.
+      input: `You are a professional email translator. Translate the provided HTML email into English.
 Important rules:
 1. Preserve every HTML tag and attribute exactly as in the original markup.
 2. Do NOT translate or modify template variables (e.g. {{variable}}, {unsubscribe}, {subtag:name}).
@@ -131,12 +131,12 @@ export async function POST(request: Request) {
 
       const effectiveTemplate = dbPrompt
         ? {
-            name: dbPrompt.name,
-            description: dbPrompt.description || templateType.description,
-            system: dbPrompt.systemPrompt,
-            user: dbPrompt.userPrompt,
-            designEngine: dbPrompt.designEngine,
-          }
+          name: dbPrompt.name,
+          description: dbPrompt.description || templateType.description,
+          system: dbPrompt.systemPrompt,
+          user: dbPrompt.userPrompt,
+          designEngine: dbPrompt.designEngine,
+        }
         : templateType;
 
       const urlsForGeneration = Array.isArray(url) ? url : url ? [url] : [];
@@ -694,7 +694,7 @@ async function processSingleUrl(
   try {
     const extractionResponse = await openai.responses.create({
       model: "gpt-5-mini",
-            input: `Extract e-commerce product info from webpage content. Return ONLY valid JSON with required fields.
+      input: `Extract e-commerce product info from webpage content. Return ONLY valid JSON with required fields.
 
 Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
 
@@ -737,7 +737,7 @@ Use structured data above when available. Return full URLs only. Return ONLY the
 
       const fallbackResponse = await openai.responses.create({
         model: "gpt-5-mini",
-                input: `Extract product info from content. Return ONLY valid JSON.
+        input: `Extract product info from content. Return ONLY valid JSON.
 
 Content: "${shorterContent}"
 
@@ -834,7 +834,7 @@ async function generateEmailTemplate(
     // Step 1: OpenAI generates the email content/copy
     const contentResponse = await openai.responses.create({
       model: "gpt-5-mini",
-            input: `Email copywriter. Write in ${singleProductInfo.language}. Return ONLY valid JSON with subject, headline, bodyText, ctaText, preheader.
+      input: `Email copywriter. Write in ${singleProductInfo.language}. Return ONLY valid JSON with subject, headline, bodyText, ctaText, preheader.
 
 Product: ${singleProductInfo.title}
 Price: ${singleProductInfo.salePrice || singleProductInfo.regularPrice}
@@ -880,7 +880,7 @@ async function generateWithGPT4O(
 ) {
   const designResponse = await openai.responses.create({
     model: "gpt-5.2",
-        input: `${templateType.system}
+    input: `${templateType.system}
 
 You are an expert HTML email developer. Create a single product email template.
 
@@ -949,7 +949,7 @@ async function generateWithClaude(
   templateType: any
 ) {
   const designResponse = await anthropic.messages.create({
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-4-6",
     max_tokens: 4000,
     messages: [
       {

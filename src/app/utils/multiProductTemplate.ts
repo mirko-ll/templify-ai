@@ -32,19 +32,19 @@ export async function generateMultiProductTemplate(
     // Use GPT-5 for both content and design
     const contentResponse = await openai.responses.create({
       model: "gpt-5-mini",
-            input: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.
+      input: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.
 
 ${templateType.user
-            .replace(/\{\{product_names\}\}/g, productNames)
-            .replace(/\{\{product_links\}\}/g, productLinks)
-            .replace(/\{\{product_images\}\}/g, productImages)
-            .replace(/\{\{product_prices\}\}/g, productPrices)
-            .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
+          .replace(/\{\{product_names\}\}/g, productNames)
+          .replace(/\{\{product_links\}\}/g, productLinks)
+          .replace(/\{\{product_images\}\}/g, productImages)
+          .replace(/\{\{product_prices\}\}/g, productPrices)
+          .replace(/\{\{email_address\}\}/g, "{{email_address}}")}
 
 Products details:
 ${multiProductInfo.products
-              .map(
-                (product, index) => `
+          .map(
+            (product, index) => `
 Product ${index + 1}:
 Name: ${product.title}
 Description: ${product.description}
@@ -55,8 +55,8 @@ Regular Price: ${product.regularPrice}
 Sale Price: ${product.salePrice}
 Discount: ${product.discount}
 `
-              )
-              .join("")}
+          )
+          .join("")}
 
 Generate email content in ${multiProductInfo.language} language.
 
@@ -80,7 +80,7 @@ Please return ONLY a JSON object with:
   } else {
     // Use Claude for content generation
     const contentResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       messages: [
         {
@@ -140,7 +140,7 @@ Please return ONLY a JSON object with:
     // Use GPT-5 for HTML generation
     const designResponse = await openai.responses.create({
       model: "gpt-5.2",
-            input: `You are an expert HTML email developer. Create responsive, cross-client compatible email templates.
+      input: `You are an expert HTML email developer. Create responsive, cross-client compatible email templates.
 
 Create a multi-product landing page email template using this content:
 
@@ -169,7 +169,7 @@ Create a responsive email template that showcases all products effectively with 
   } else {
     // Use Claude for HTML generation
     const designResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       max_tokens: 4000,
       messages: [
         {
