@@ -1,3 +1,5 @@
+import { extractProductGroupSlug, toUtmSlug } from "./product-grouping";
+
 export interface CampaignUrlRule {
   campaignUrlTemplate?: string;
   countryCampaignUrlTemplates?: Record<string, string>;
@@ -16,14 +18,78 @@ export interface CampaignUrlListing {
   countryCode?: string | null;
 }
 
-function toUtmSlug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/\./g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+/**
+ * Trailing offer code of a URL slug — the last token after dropping variant
+ * suffixes (`-lp`), bundle counts (`-11`, `-1p1`) and localized "free" markers.
+ * "…-cevapmaker" → "cevapmaker", "…-chopibox-2" → "chopibox",
+ * "…-discoglo-11-gratis" → "discoglo". Used only as a fallback for the utm
+ * value; the primary source is the offer code extracted from the title.
+ */
+function trailingSlugCode(slug: string): string {
+  const tokens = decodeURIComponent(slug || "")
+    .split("-")
+    .filter(Boolean);
+  while (tokens.length > 1) {
+    const last = tokens[tokens.length - 1].toLowerCase();
+    if (last === "lp" || /^\d+(?:p\d+)?$/.test(last) || FREE_SLUG_WORDS.has(last)) {
+      tokens.pop();
+    } else {
+      break;
+    }
+  }
+  return tokens[tokens.length - 1] || "";
+}
+
+/** Common trailing "free" markers seen in offer slugs (Latin scripts). */
+const FREE_SLUG_WORDS = new Set([
+  "gratis",
+  "free",
+  "gratuit",
+  "gratuito",
+  "gratuita",
+  "gratuite",
+  "omaggio",
+  "kostenlos",
+  "zdarma",
+  "zadarmo",
+  "besplatno",
+  "brezplacno",
+  "darmo",
+  "nemokamai",
+  "nemokama",
+  "dovanu",
+  "bezmaksas",
+  "ingyen",
+  "cadou",
+  "ucretsiz",
+  "bedava",
+  "ilmainen",
+]);
+
+/**
+ * The `utm_campaign` value for a product: its stable offer/brand code
+ * (e.g. "cevapmaker", "discoglo", "sixpack"), slugified.
+ *
+ * The code is extracted from the title the same way the catalog groups
+ * products, so every country's link for one product shares a single campaign
+ * value — the report then aggregates by product instead of by each country's
+ * localized title. Previously this used the normalized title, which is the
+ * localized *description* (the text before the "|"), differs per country, and
+ * collapses to an empty string for non-Latin titles.
+ *
+ * Falls back to the URL slug's trailing code, then the normalized title/title,
+ * so a product whose title carries no detectable code still gets a value.
+ */
+function utmCampaignValue(
+  title: string,
+  normalizedTitle: string | null | undefined,
+  slug: string
+): string {
+  return (
+    toUtmSlug(extractProductGroupSlug(title || "")) ||
+    toUtmSlug(trailingSlugCode(slug)) ||
+    toUtmSlug(normalizedTitle || title || "")
+  );
 }
 
 function stripTrailingSlash(value: string) {
@@ -84,16 +150,20 @@ export function buildCampaignUrl(params: {
     return listing.url;
   }
 
+  const slug =
+    listing.slug ||
+    decodeURIComponent(url.pathname.replace(/\/$/, "").split("/").pop() || "");
+
   const values: Record<string, string> = {
     url: stripTrailingSlash(listing.url),
     rawUrl: listing.url,
     origin: url.origin,
     path: stripTrailingSlash(url.pathname),
-    slug: listing.slug || decodeURIComponent(url.pathname.replace(/\/$/, "").split("/").pop() || ""),
+    slug,
     countryCode: listing.countryCode || "",
     title: product.title,
     normalizedTitle: product.normalizedTitle || "",
-    utmCampaign: toUtmSlug(product.normalizedTitle || product.title),
+    utmCampaign: utmCampaignValue(product.title, product.normalizedTitle, slug),
     price,
     priceInt: priceInt(price),
   };

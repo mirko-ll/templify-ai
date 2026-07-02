@@ -399,7 +399,13 @@ export async function runPlanGeneration(planId: string): Promise<void> {
           // the local currency on the page — so the override goes into every
           // country's link as typed (and the default prices are EUR too).
           let appliedEurPrice = chosen.campaignUrlRule?.defaultPrice?.trim() || null;
-          if (priceOverride && chosen.url && chosen.campaignUrlRule) {
+          // Rebuild the campaign link at generation time — not only when a price
+          // is overridden — so it always reflects the current utm_campaign scheme
+          // (the product's stable offer code) even for snapshots captured before
+          // that logic changed. With no override the price param is unchanged
+          // (rebuilt from the rule's default), so only the utm is corrected.
+          // Falls back to the prebuilt link on any malformed-URL error.
+          if (chosen.url && chosen.campaignUrlRule) {
             try {
               url = buildCampaignUrl({
                 product: {
@@ -415,7 +421,7 @@ export async function runPlanGeneration(planId: string): Promise<void> {
                 rule: chosen.campaignUrlRule,
                 price: priceOverride,
               });
-              appliedEurPrice = priceOverride;
+              if (priceOverride) appliedEurPrice = priceOverride;
             } catch {
               // Malformed listing URL — keep the prebuilt campaign link.
             }

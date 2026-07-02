@@ -60,7 +60,17 @@
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 30)",
       "PowerShell(npx eslint \"src/app/clients/[id]/planner/DayProductForm.tsx\" 2>&1 | Select-Object -First 30)",
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20)",
-      "PowerShell(npx eslint \"src/app/clients/[id]/planner/DayEditor.tsx\" \"src/app/clients/[id]/planner/page.tsx\" \"src/app/api/clients/[id]/campaign-plans/[planId]/items/[itemId]/regenerate/route.ts\" 2>&1 | Select-Object -First 40)"
+      "PowerShell(npx eslint \"src/app/clients/[id]/planner/DayEditor.tsx\" \"src/app/clients/[id]/planner/page.tsx\" \"src/app/api/clients/[id]/campaign-plans/[planId]/items/[itemId]/regenerate/route.ts\" 2>&1 | Select-Object -First 40)",
+      "Bash(node -e ' *)",
+      "Bash(mysql --version)",
+      "Bash(where mysql *)",
+      "Read(//c/Program Files/**)",
+      "Bash(ls eslint.config.* .eslintrc*)",
+      "Bash(cat eslint.config.mjs)",
+      "Bash(cat .eslintrc.json)",
+      "Bash(grep -i \"eslint\\\\|ignoreDuringBuilds\" next.config.*)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('scripts:',JSON.stringify\\(p.scripts,null,1\\)\\); console.log\\('tsx:', \\(p.devDependencies&&p.devDependencies.tsx\\)||\\(p.dependencies&&p.dependencies.tsx\\)||'none'\\); console.log\\('type:',p.type\\);\")",
+      "Bash(node scripts/verify-legacy-match.cjs)"
     ],
     "deny": [],
     "ask": [],

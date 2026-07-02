@@ -195,6 +195,21 @@ export function normalizeGroupKey(slug: string): string {
   return slug.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
+/**
+ * Slugify a value into a `utm_campaign` token: lowercased, spaces/dots → "-",
+ * anything but [a-z0-9-] dropped. Lives here (a dependency-free leaf module) so
+ * both the campaign-link builder and the report matcher share one definition.
+ */
+export function toUtmSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/\./g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 /** Display label for a stored (lowercased) category, e.g. "summer" → "Summer". */
 export function categoryLabel(category: string): string {
   return category
