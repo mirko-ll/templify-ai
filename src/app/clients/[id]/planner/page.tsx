@@ -77,14 +77,12 @@ const LIVE_STATUSES = new Set(["DRAFT", "APPROVED", "SCHEDULED", "COMPLETED"]);
 
 /**
  * Flatten plan items into per-product assignments. Each day may hold several
- * products; an item's send time is treated as an override only when it differs
- * from the shared default (so changing the default still cascades to inherited
- * days), and items are keyed by `${day}::${product}` for stable editing.
+ * products; an item's stored send time is kept as-is — the shared default is
+ * stamped onto an email when it's added, so changing the default later never
+ * retimes already-planned days. Items are keyed by `${day}::${product}` for
+ * stable editing.
  */
-function buildAssignments(
-  items: PlanItemResponse[],
-  defaultSendTime: string
-): DayAssignment[] {
+function buildAssignments(items: PlanItemResponse[]): DayAssignment[] {
   const out: DayAssignment[] = [];
   for (const item of items) {
     const snapshot = item.productSnapshot;
@@ -101,7 +99,7 @@ function buildAssignments(
       templateId: item.templateId,
       subject: item.subject,
       preheader: item.preheader,
-      sendTime: timeKey === defaultSendTime ? null : timeKey,
+      sendTime: timeKey,
       mailingListOverrides: item.mailingListOverrides ?? null,
       selectedImageUrl: item.selectedImageUrl,
       priceOverride: item.priceOverride,
@@ -365,7 +363,7 @@ export default function PlannerPage() {
       };
       setPlanId(plan.id);
       setDefaults(planDefaults);
-      setAssignments(buildAssignments(plan.items, planDefaults.sendTime));
+      setAssignments(buildAssignments(plan.items));
     },
     [clientId]
   );
@@ -412,8 +410,8 @@ export default function PlannerPage() {
     if (!response.ok) return;
     const payload = await response.json().catch(() => ({}));
     const plan = payload.plan as PlanResponse | undefined;
-    if (plan) setAssignments(buildAssignments(plan.items, defaults.sendTime));
-  }, [clientId, planId, defaults.sendTime]);
+    if (plan) setAssignments(buildAssignments(plan.items));
+  }, [clientId, planId]);
 
   // Initial client-level data + first month.
   useEffect(() => {

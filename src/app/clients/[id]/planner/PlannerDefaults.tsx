@@ -59,7 +59,11 @@ export function PlannerDefaultsPanel({
             }))}
           />
         </Field>
-        <Field label="Send time" htmlFor="default-time" hint="Local time, each day">
+        <Field
+          label="Send time"
+          htmlFor="default-time"
+          hint="Local time — applies to emails you add from now on"
+        >
           <DateTimePicker
             id="default-time"
             mode="time"

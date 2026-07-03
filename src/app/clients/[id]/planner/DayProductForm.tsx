@@ -301,7 +301,9 @@ export function DayProductForm({
       templateId: useTemplateDefault ? null : templateId,
       subject: useSubjectDefault ? null : subject,
       preheader: usePreheaderDefault ? null : preheader,
-      sendTime: useTimeDefault ? null : sendTime,
+      // Stamp the concrete time — a later change to the shared default must
+      // not silently retime emails that were already planned.
+      sendTime: useTimeDefault ? defaults.sendTime : sendTime,
       mailingListOverrides: useMailingDefault ? null : dayOverrides,
       selectedImageUrl,
       priceOverride: price.trim() || null,

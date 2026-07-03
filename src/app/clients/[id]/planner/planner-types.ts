@@ -229,7 +229,11 @@ export interface DayAssignment {
   templateId: string | null;
   subject: string | null;
   preheader: string | null;
-  /** Per-product send time "HH:mm". null → inherit the shared default send time. */
+  /**
+   * Per-product send time "HH:mm". The shared default is stamped on at save
+   * time, so this is always set on saved items — changing the default later
+   * only affects newly added emails. null only as a legacy fallback.
+   */
   sendTime: string | null;
   /** null → inherit the shared mailing-list defaults. */
   mailingListOverrides: Record<string, string[]> | null;
@@ -284,7 +288,7 @@ export function assignmentId(dayKey: string, groupKey: string): string {
   return `${dayKey}::${groupKey}`;
 }
 
-/** The send time this product actually goes out at (its own override, else the shared default). */
+/** The send time this product actually goes out at (its stamped time, else the shared default). */
 export function effectiveSendTime(
   item: DayAssignment,
   defaults: PlannerDefaults
