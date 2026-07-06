@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   CommandLineIcon,
   GlobeAltIcon,
+  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import Image from "next/image";
@@ -309,6 +310,28 @@ export default function Header() {
                                 <p className="font-medium">Countries</p>
                                 <p className="text-xs text-gray-500">
                                   Manage supported regions
+                                </p>
+                              </div>
+                            </Link>
+                          )}
+                        </Menu.Item>
+                        <Menu.Item>
+                          {({ active }) => (
+                            <Link
+                              href="/admin/diagnostics"
+                              className={`${
+                                active
+                                  ? "bg-gradient-to-r from-rose-50 to-orange-50"
+                                  : ""
+                              } group flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 transition-all duration-200`}
+                            >
+                              <div className="w-8 h-8 bg-gradient-to-r from-rose-100 to-orange-100 rounded-lg flex items-center justify-center mr-3 group-hover:from-rose-200 group-hover:to-orange-200 transition-all duration-200">
+                                <WrenchScrewdriverIcon className="h-4 w-4 text-rose-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">Diagnostics</p>
+                                <p className="text-xs text-gray-500">
+                                  Broken campaign links
                                 </p>
                               </div>
                             </Link>

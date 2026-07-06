@@ -19,6 +19,11 @@ export function repairMarkdownLinkAttributes(html: string): string {
   );
 }
 
+/** True when the HTML still contains a markdown-wrapped link attribute. */
+export function hasMarkdownLinkAttributes(html: string): boolean {
+  return /\b(href|src|background)\s*=\s*["']\s*\[/i.test(html);
+}
+
 /**
  * Prisma `contains` filters matching HTML with markdown-wrapped link
  * attributes, for finding broken CampaignCountry.preparedHtml rows.
