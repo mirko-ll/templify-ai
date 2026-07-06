@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  BROKEN_LINK_FILTERS,
+  repairMarkdownLinkAttributes,
+} from "@/lib/html-links";
 
 /**
  * No item status change anywhere in the plan for this long means the
@@ -121,6 +125,59 @@ export async function syncCampaignPlanItems(
         },
       });
       changed = true;
+    }
+  }
+
+  // Detect campaigns whose stored per-country HTML carries markdown-mangled
+  // link attributes (href="[url](url)") — a translation-model glitch that
+  // produces dead links and gets the newsletter stopped by SqualoMail.
+  // Un-pushed rows are repaired in place so the cron pushes clean HTML;
+  // already-pushed rows went out broken, so the item is flagged FAILED and
+  // can be regenerated.
+  if (scheduled.length > 0) {
+    const brokenRows = await prisma.campaignCountry.findMany({
+      where: {
+        campaignId: { in: scheduled.map((item) => item.campaignId as string) },
+        OR: BROKEN_LINK_FILTERS,
+      },
+      select: {
+        id: true,
+        campaignId: true,
+        countryCode: true,
+        isPushed: true,
+        preparedHtml: true,
+      },
+    });
+
+    if (brokenRows.length > 0) {
+      for (const row of brokenRows) {
+        if (!row.preparedHtml) continue;
+        await prisma.campaignCountry.update({
+          where: { id: row.id },
+          data: { preparedHtml: repairMarkdownLinkAttributes(row.preparedHtml) },
+        });
+      }
+
+      const pushedBrokenByCampaign = new Map<string, string[]>();
+      for (const row of brokenRows) {
+        if (!row.isPushed) continue;
+        const countries = pushedBrokenByCampaign.get(row.campaignId) ?? [];
+        countries.push(row.countryCode);
+        pushedBrokenByCampaign.set(row.campaignId, countries);
+      }
+
+      for (const item of scheduled) {
+        const countries = pushedBrokenByCampaign.get(item.campaignId as string);
+        if (!countries) continue;
+        await prisma.campaignPlanItem.update({
+          where: { id: item.id },
+          data: {
+            status: "FAILED",
+            errorMessage: `Campaign links were corrupted during translation for ${countries.join(", ")} and the newsletter was pushed broken (likely stopped by SqualoMail). Retry to regenerate this day.`,
+          },
+        });
+        changed = true;
+      }
     }
   }
 

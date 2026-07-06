@@ -71,7 +71,8 @@
       "Bash(grep -i \"eslint\\\\|ignoreDuringBuilds\" next.config.*)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('scripts:',JSON.stringify\\(p.scripts,null,1\\)\\); console.log\\('tsx:', \\(p.devDependencies&&p.devDependencies.tsx\\)||\\(p.dependencies&&p.dependencies.tsx\\)||'none'\\); console.log\\('type:',p.type\\);\")",
       "Bash(node scripts/verify-legacy-match.cjs)",
-      "PowerShell(npx tsc --noEmit 2>$null; if \\($?\\) { \"TYPECHECK OK\" })"
+      "PowerShell(npx tsc --noEmit 2>$null; if \\($?\\) { \"TYPECHECK OK\" })",
+      "PowerShell(Get-Service *)"
     ],
     "deny": [],
     "ask": [],
