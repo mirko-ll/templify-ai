@@ -131,16 +131,15 @@ function computeCampaignAggregates(
   };
 }
 
+// Only statuses that getEffectiveStatus can produce — the API filters with
+// the same date-based logic, so filter options and visible badges stay in sync.
 const STATUS_OPTIONS: Array<{ value: CampaignStatus | "ALL"; label: string }> =
   [
     { value: "ALL", label: "All statuses" },
-    { value: "READY", label: "Ready" },
     { value: "SCHEDULED", label: "Scheduled" },
-    { value: "SENDING", label: "Sending" },
     { value: "SENT", label: "Sent" },
     { value: "FAILED", label: "Failed" },
     { value: "CANCELLED", label: "Cancelled" },
-    { value: "DRAFT", label: "Draft" },
   ];
 
 const STATUS_STYLES: Record<

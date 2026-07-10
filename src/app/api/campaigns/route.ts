@@ -33,6 +33,43 @@ function parseLimit(value: string | null, fallback = 50): number {
   return Math.min(parsed, 100);
 }
 
+/**
+ * Campaigns are sent by SqualoMail, so the stored status is often stale
+ * (rows stay SCHEDULED after the send happens). Filter with the same
+ * date-based logic the campaigns page uses to render status badges
+ * (getEffectiveStatus), so the filter matches what the user sees.
+ */
+function buildStatusWhere(status: CampaignStatus | undefined) {
+  if (!status) {
+    return {};
+  }
+
+  const now = new Date();
+  switch (status) {
+    case CampaignStatus.SCHEDULED:
+      return {
+        status: {
+          notIn: [CampaignStatus.FAILED, CampaignStatus.CANCELLED],
+        },
+        sentAt: null,
+        scheduledAt: { gt: now },
+      };
+    case CampaignStatus.SENT:
+      return {
+        status: {
+          notIn: [CampaignStatus.FAILED, CampaignStatus.CANCELLED],
+        },
+        OR: [
+          { sentAt: { not: null } },
+          { scheduledAt: null },
+          { scheduledAt: { lte: now } },
+        ],
+      };
+    default:
+      return { status };
+  }
+}
+
 async function verifyClientOwnership(userId: string, clientId: string) {
   // Check if user is admin
   const user = await prisma.user.findUnique({
@@ -110,11 +147,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
+  const statusWhere = buildStatusWhere(statusFilter);
+
   const [campaigns, totalCount] = await Promise.all([
     prisma.campaign.findMany({
       where: {
         clientId: client.id,
-        status: statusFilter,
+        ...statusWhere,
       },
       orderBy: {
         createdAt: "desc",
@@ -137,7 +176,7 @@ export async function GET(request: NextRequest) {
     prisma.campaign.count({
       where: {
         clientId: client.id,
-        status: statusFilter,
+        ...statusWhere,
       },
     }),
   ]);
