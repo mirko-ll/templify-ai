@@ -149,37 +149,54 @@ export async function GET(request: NextRequest) {
 
   const statusWhere = buildStatusWhere(statusFilter);
 
-  const [campaigns, totalCount] = await Promise.all([
-    prisma.campaign.findMany({
-      where: {
-        clientId: client.id,
-        ...statusWhere,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: limit,
-      skip,
-      include: {
-        countryTargets: {
-          include: {
-            country: {
-              select: {
-                code: true,
-                name: true,
-              },
+  // Order by when the campaign (actually) goes out, not when the row was
+  // created — resend clones are created long after their original but should
+  // sort by their own send time. That's COALESCE(sentAt, scheduledAt,
+  // createdAt), which Prisma orderBy can't express, so sort ids in code.
+  const idRows = await prisma.campaign.findMany({
+    where: {
+      clientId: client.id,
+      ...statusWhere,
+    },
+    select: {
+      id: true,
+      sentAt: true,
+      scheduledAt: true,
+      createdAt: true,
+    },
+  });
+
+  const effectiveSendTime = (row: (typeof idRows)[number]) =>
+    (row.sentAt ?? row.scheduledAt ?? row.createdAt).getTime();
+  idRows.sort(
+    (a, b) =>
+      effectiveSendTime(b) - effectiveSendTime(a) ||
+      b.createdAt.getTime() - a.createdAt.getTime()
+  );
+
+  const totalCount = idRows.length;
+  const pageIds = idRows.slice(skip, skip + limit).map((row) => row.id);
+
+  const pageRows = await prisma.campaign.findMany({
+    where: { id: { in: pageIds } },
+    include: {
+      countryTargets: {
+        include: {
+          country: {
+            select: {
+              code: true,
+              name: true,
             },
           },
         },
       },
-    }),
-    prisma.campaign.count({
-      where: {
-        clientId: client.id,
-        ...statusWhere,
-      },
-    }),
-  ]);
+    },
+  });
+
+  const rowsById = new Map(pageRows.map((row) => [row.id, row]));
+  const campaigns = pageIds
+    .map((id) => rowsById.get(id))
+    .filter((row): row is NonNullable<typeof row> => row != null);
 
   const payload = campaigns.map((campaign) => ({
     id: campaign.id,
