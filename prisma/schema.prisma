@@ -542,6 +542,7 @@ model CampaignPlanItem {
   groupKey         String?
   subject          String?                @db.Text
   preheader        String?                @db.Text
+  senderName       String?
   mailingListOverrides Json?
   selectedImageUrl String?                @db.Text
   priceOverride    String?

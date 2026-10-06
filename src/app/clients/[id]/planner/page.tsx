@@ -51,6 +51,7 @@ interface PlanItemResponse {
   templateId: string | null;
   subject: string | null;
   preheader: string | null;
+  senderName: string | null;
   mailingListOverrides: Record<string, string[]> | null;
   selectedImageUrl: string | null;
   priceOverride: string | null;
@@ -99,6 +100,7 @@ function buildAssignments(items: PlanItemResponse[]): DayAssignment[] {
       templateId: item.templateId,
       subject: item.subject,
       preheader: item.preheader,
+      senderName: item.senderName ?? null,
       sendTime: timeKey,
       mailingListOverrides: item.mailingListOverrides ?? null,
       selectedImageUrl: item.selectedImageUrl,
@@ -298,6 +300,7 @@ export default function PlannerPage() {
               templateId: assignment.templateId,
               subject: assignment.subject,
               preheader: assignment.preheader,
+              senderName: assignment.senderName,
               mailingListOverrides: assignment.mailingListOverrides,
               selectedImageUrl: assignment.selectedImageUrl,
               priceOverride: assignment.priceOverride,

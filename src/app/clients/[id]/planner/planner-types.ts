@@ -229,6 +229,7 @@ export interface DayAssignment {
   templateId: string | null;
   subject: string | null;
   preheader: string | null;
+  senderName: string | null;
   /**
    * Per-product send time "HH:mm". The shared default is stamped on at save
    * time, so this is always set on saved items — changing the default later

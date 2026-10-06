@@ -118,6 +118,7 @@ interface IncomingItem {
   templateId?: unknown;
   subject?: unknown;
   preheader?: unknown;
+  senderName?: unknown;
   mailingListOverrides?: unknown;
   selectedImageUrl?: unknown;
   priceOverride?: unknown;
@@ -240,6 +241,7 @@ export async function PUT(
         templateId: str(item.templateId),
         subject: typeof item.subject === "string" ? item.subject : null,
         preheader: typeof item.preheader === "string" ? item.preheader : null,
+        senderName: typeof item.senderName === "string" ? item.senderName : null,
         mailingListOverrides:
           item.mailingListOverrides === null
             ? null
@@ -260,6 +262,7 @@ export async function PUT(
     templateId: string | null;
     subject: string | null;
     preheader: string | null;
+    senderName: string | null;
     mailingListOverrides: Prisma.InputJsonValue | null;
     selectedImageUrl: string | null;
     priceOverride: string | null;
@@ -297,6 +300,7 @@ export async function PUT(
           templateId: item.templateId,
           subject: item.subject,
           preheader: item.preheader,
+          senderName: item.senderName,
           mailingListOverrides:
             item.mailingListOverrides === null ? undefined : item.mailingListOverrides,
           selectedImageUrl: item.selectedImageUrl,

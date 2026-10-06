@@ -101,7 +101,7 @@ export function DefaultToggle({
 
 /**
  * Add/edit a single product for a planned day: which product, countries, image,
- * template, subject, preheader, send time and mailing-list overrides. Each field
+ * template, subject, preheader, sender name, send time and mailing-list overrides. Each field
  * can inherit the shared default or be set just for this product.
  */
 export function DayProductForm({
@@ -144,6 +144,10 @@ export function DayProductForm({
     initial ? initial.preheader === null : true
   );
   const [preheader, setPreheader] = useState(initial?.preheader ?? "");
+  const [useSenderDefault, setUseSenderDefault] = useState(
+    initial ? initial.senderName === null : true
+  );
+  const [senderName, setSenderName] = useState(initial?.senderName ?? "");
   const [useTimeDefault, setUseTimeDefault] = useState(
     initial ? initial.sendTime === null : true
   );
@@ -301,6 +305,7 @@ export function DayProductForm({
       templateId: useTemplateDefault ? null : templateId,
       subject: useSubjectDefault ? null : subject,
       preheader: usePreheaderDefault ? null : preheader,
+      senderName: useSenderDefault ? null : senderName,
       // Stamp the concrete time — a later change to the shared default must
       // not silently retime emails that were already planned.
       sendTime: useTimeDefault ? defaults.sendTime : sendTime,
@@ -614,6 +619,23 @@ export function DayProductForm({
             />
             <VariableHint className="mt-1.5" />
           </>
+        )}
+      </Field>
+
+      {/* Sender name */}
+      <Field label="Sender name" hint="Blank → derived from the product">
+        <DefaultToggle
+          useDefault={useSenderDefault}
+          onToggle={setUseSenderDefault}
+          defaultLabel={defaults.senderName || "blank"}
+        />
+        {!useSenderDefault && (
+          <Input
+            className="mt-2"
+            value={senderName}
+            onChange={(event) => setSenderName(event.target.value)}
+            placeholder="Custom sender name for this product"
+          />
         )}
       </Field>
 

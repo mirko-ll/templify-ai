@@ -121,6 +121,7 @@ export function DayResendForm({
       templateId: null,
       subject: null,
       preheader: null,
+      senderName: null,
       // Stamp the concrete time — a later change to the shared default must
       // not silently retime emails that were already planned.
       sendTime: useTimeDefault ? defaults.sendTime : sendTime,

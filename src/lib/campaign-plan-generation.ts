@@ -508,6 +508,7 @@ export async function runPlanGeneration(planId: string): Promise<void> {
           emailTemplate.subject ||
           "";
         const preheader = item.preheader?.trim() || defaultPreheader.trim() || "";
+        const senderName = item.senderName?.trim() || defaultSenderName.trim() || "";
         const productNickname =
           productInfo?.title || snapshotTitle(item.productSnapshot) || undefined;
 
@@ -538,7 +539,7 @@ export async function runPlanGeneration(planId: string): Promise<void> {
             baseCountry: data.baseCountry ?? null,
             subject,
             preheader,
-            senderName: defaultSenderName,
+            senderName,
             sendDate: item.sendDate.toISOString(),
             emailTemplate,
             countryResults,
