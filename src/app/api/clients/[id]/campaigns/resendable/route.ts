@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyUnlessClientAccess } from "@/lib/client-access";
+import { cleanProductImages } from "@/lib/product-images";
 
 const PAGE_SIZE = 20;
 
@@ -20,17 +21,12 @@ const SUBJECT_PRIORITY_COUNTRY = "SI";
 /** Suffix the backend resend route stamps on cloned campaigns' names. */
 const RESEND_NAME_SUFFIX = " · resend";
 
-/** First product image from the stored productInfo JSON, if any. */
+/** Best (else first) product image from the stored productInfo JSON, if any. */
 function extractImageUrl(productInfoJson: string | null): string | null {
   if (!productInfoJson) return null;
   try {
-    const info = JSON.parse(productInfoJson) as { images?: unknown };
-    if (Array.isArray(info?.images)) {
-      const first = info.images.find(
-        (url): url is string => typeof url === "string" && /^https?:\/\//i.test(url)
-      );
-      return first ?? null;
-    }
+    const info = JSON.parse(productInfoJson) as { images?: unknown; bestImageUrl?: unknown };
+    return cleanProductImages(info ?? {}).bestImageUrl || null;
   } catch {
     // Legacy/malformed snapshot — the picker just shows no thumbnail.
   }

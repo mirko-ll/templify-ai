@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { cleanCountryResultImages } from "@/lib/product-images";
 
 async function ensureClientOwnership(userId: string, clientId: string) {
   const user = await prisma.user.findUnique({
@@ -75,7 +76,9 @@ export async function GET(
   let countryResults: unknown = null;
   if (campaign.countryResultsJson) {
     try {
-      countryResults = JSON.parse(campaign.countryResultsJson);
+      // Older scrapes may carry badge images (EU-warehouse flag) ahead of the
+      // product photo; /app pre-selects image 0, so put the real photo there.
+      countryResults = cleanCountryResultImages(JSON.parse(campaign.countryResultsJson));
     } catch {
       countryResults = null;
     }

@@ -10,6 +10,7 @@ import * as cheerio from "cheerio";
 import { ProductInfo, MultiProductInfo, TemplateType } from "../../types/types";
 import { generateMultiProductTemplate } from "../../utils/multiProductTemplate";
 import { formatPriceLike } from "@/lib/product-links";
+import { cleanProductImages, isProductImageUrl } from "@/lib/product-images";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -654,7 +655,8 @@ async function processSingleUrl(
   $('img[src*="product"], img[src*="item"], .product img, .gallery img, [class*="product"] img').each((i, el) => {
     const src = $(el).attr('src');
     if (src && !src.includes('icon') && !src.includes('logo') && structuredData.images.length < 10) {
-      structuredData.images.push(src.startsWith('http') ? src : new URL(src, url).href);
+      const absolute = src.startsWith('http') ? src : new URL(src, url).href;
+      if (isProductImageUrl(absolute)) structuredData.images.push(absolute);
     }
   });
 
@@ -774,7 +776,7 @@ Return ONLY: {"language": "en", "title": "", "description": "", "regularPrice": 
     discount: extractedData.discount || "",
   };
 
-  return productInfo;
+  return cleanProductImages(productInfo);
 }
 
 async function processMultipleUrls(
