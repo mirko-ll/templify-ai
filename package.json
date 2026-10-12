@@ -14,7 +14,7 @@
     "migrate:prompts": "tsx scripts/migrate-prompts.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.56.0",
+    "@anthropic-ai/sdk": "^0.133.0",
     "@auth/prisma-adapter": "^2.10.0",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",

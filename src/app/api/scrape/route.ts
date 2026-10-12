@@ -11,6 +11,15 @@ import { ProductInfo, MultiProductInfo, TemplateType } from "../../types/types";
 import { generateMultiProductTemplate } from "../../utils/multiProductTemplate";
 import { formatPriceLike } from "@/lib/product-links";
 import { cleanProductImages, isProductImageUrl } from "@/lib/product-images";
+import {
+  CLAUDE_MAX_TOKENS,
+  CLAUDE_MODEL,
+  CLAUDE_THINKING,
+  OPENAI_FAST_EFFORT,
+  OPENAI_FAST_MODEL,
+  OPENAI_MAIN_EFFORT,
+  OPENAI_MAIN_MODEL,
+} from "@/lib/ai-models";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -28,7 +37,8 @@ async function translateTextToEnglish(text: string | null | undefined) {
 
   try {
     const response = await openai.responses.create({
-      model: "gpt-5.2",
+      model: OPENAI_MAIN_MODEL,
+      reasoning: { effort: OPENAI_MAIN_EFFORT },
       input: `Translate the provided text to English. Return only the translated text with no additional commentary.
 
 Text to translate:
@@ -51,7 +61,8 @@ async function translateHtmlToEnglish(html: string) {
 
   try {
     const response = await openai.responses.create({
-      model: "gpt-5.2",
+      model: OPENAI_MAIN_MODEL,
+      reasoning: { effort: OPENAI_MAIN_EFFORT },
       input: `You are a professional email translator. Translate the provided HTML email into English.
 Important rules:
 1. Preserve every HTML tag and attribute exactly as in the original markup.
@@ -695,7 +706,8 @@ async function processSingleUrl(
   let extractionOutput: string;
   try {
     const extractionResponse = await openai.responses.create({
-      model: "gpt-5-mini",
+      model: OPENAI_FAST_MODEL,
+      reasoning: { effort: OPENAI_FAST_EFFORT },
       input: `Extract e-commerce product info from webpage content. Return ONLY valid JSON with required fields.
 
 Structured: title="${structuredData.title}", description="${structuredData.description}", ogImage="${structuredData.ogImage}", price="${structuredData.price}", images=[${structuredData.images.slice(0, 5).join(', ')}]
@@ -738,7 +750,8 @@ Use structured data above when available. Return full URLs only. Return ONLY the
       const shorterContent = fullContent.substring(0, 10000) + "... [truncated]";
 
       const fallbackResponse = await openai.responses.create({
-        model: "gpt-5-mini",
+        model: OPENAI_FAST_MODEL,
+        reasoning: { effort: OPENAI_FAST_EFFORT },
         input: `Extract product info from content. Return ONLY valid JSON.
 
 Content: "${shorterContent}"
@@ -835,7 +848,8 @@ async function generateEmailTemplate(
 
     // Step 1: OpenAI generates the email content/copy
     const contentResponse = await openai.responses.create({
-      model: "gpt-5-mini",
+      model: OPENAI_FAST_MODEL,
+      reasoning: { effort: OPENAI_FAST_EFFORT },
       input: `Email copywriter. Write in ${singleProductInfo.language}. Return ONLY valid JSON with subject, headline, bodyText, ctaText, preheader.
 
 Product: ${singleProductInfo.title}
@@ -881,7 +895,8 @@ async function generateWithGPT4O(
   templateType: any
 ) {
   const designResponse = await openai.responses.create({
-    model: "gpt-5.2",
+    model: OPENAI_MAIN_MODEL,
+    reasoning: { effort: OPENAI_MAIN_EFFORT },
     input: `${templateType.system}
 
 You are an expert HTML email developer. Create a single product email template.
@@ -951,8 +966,9 @@ async function generateWithClaude(
   templateType: any
 ) {
   const designResponse = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    model: CLAUDE_MODEL,
+    max_tokens: CLAUDE_MAX_TOKENS,
+    thinking: CLAUDE_THINKING,
     messages: [
       {
         role: "user",
@@ -1005,9 +1021,9 @@ REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately.`,
     ],
   });
 
-  const rawContent = designResponse.content[0].type === "text"
-    ? designResponse.content[0].text
-    : "";
+  // With thinking on, the first block is a thinking block, not the reply.
+  const textBlock = designResponse.content.find((block) => block.type === "text");
+  const rawContent = textBlock?.type === "text" ? textBlock.text : "";
 
   let htmlContent = rawContent.trim();
 

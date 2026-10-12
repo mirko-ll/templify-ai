@@ -1,7 +1,7 @@
 # 🚀 TemplAIto Prompt Generator System
 
 ## Overview
-A comprehensive AI prompt management system that allows admins to create, test, and manage email template prompts with support for both Claude Sonnet-4 and GPT-4o design engines.
+A comprehensive AI prompt management system that allows admins to create, test, and manage email template prompts with support for both Claude Sonnet 5.5 and GPT-6.1 design engines.
 
 ## 🏗️ System Architecture
 
@@ -67,7 +67,7 @@ model TemplateGeneration {
 
 2. **Create Prompt** (`/admin/prompts/create`)
    - Visual prompt builder
-   - AI engine selection (Claude/GPT-4o)
+   - AI engine selection (Claude/GPT)
    - Live preview capability
    - Variable helper guide
 
@@ -78,7 +78,7 @@ model TemplateGeneration {
    - Performance metrics
 
 ### Key Features
-- **Dual AI Engine Support**: Choose between Claude Sonnet-4 and GPT-4o
+- **Dual AI Engine Support**: Choose between Claude Sonnet 5.5 and GPT-6.1
 - **Live Testing**: Test prompts with real URLs instantly
 - **Analytics Dashboard**: Track usage, success rates, and performance
 - **Version Control**: Manage prompt versions and changes
@@ -100,8 +100,8 @@ model TemplateGeneration {
 - ✅ Enabled A/B testing capabilities
 
 ### Dual AI Engine Support
-- ✅ Claude Sonnet-4 (existing)
-- ✅ GPT-4o (new implementation)
+- ✅ Claude Sonnet 5.5
+- ✅ GPT-6.1 Sol
 - ✅ Per-prompt engine selection
 - ✅ Performance comparison tracking
 
@@ -185,7 +185,7 @@ model TemplateGeneration {
 ## 🎉 Achievement Summary
 
 ✅ **Database-Driven Architecture** - Moved from hardcoded to dynamic prompt system  
-✅ **Dual AI Engine Support** - Claude + GPT-4o integration  
+✅ **Dual AI Engine Support** - Claude + GPT integration  
 ✅ **Complete Admin Panel** - Full CRUD operations with analytics  
 ✅ **Live Testing System** - Real-time prompt validation  
 ✅ **User Experience V2** - Enhanced template selection interface  

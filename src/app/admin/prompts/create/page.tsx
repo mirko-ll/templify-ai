@@ -176,10 +176,10 @@ export default function CreatePromptPage() {
                     options={[
                       {
                         value: "CLAUDE",
-                        label: "Claude Sonnet-4",
+                        label: "Claude Sonnet 5.5",
                         emoji: "⚡",
                       },
-                      { value: "GPT4O", label: "GPT-5", emoji: "✨" },
+                      { value: "GPT4O", label: "GPT-6.1", emoji: "✨" },
                     ]}
                     value={formData.designEngine}
                     onChange={(value) =>

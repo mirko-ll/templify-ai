@@ -1,6 +1,15 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import { OpenAI } from "openai";
 import { MultiProductInfo, TemplateType } from "../types/types";
+import {
+  CLAUDE_MAX_TOKENS,
+  CLAUDE_MODEL,
+  CLAUDE_THINKING,
+  OPENAI_FAST_EFFORT,
+  OPENAI_FAST_MODEL,
+  OPENAI_MAIN_EFFORT,
+  OPENAI_MAIN_MODEL,
+} from "@/lib/ai-models";
 
 export async function generateMultiProductTemplate(
   multiProductInfo: MultiProductInfo,
@@ -29,9 +38,10 @@ export async function generateMultiProductTemplate(
   let emailContent;
 
   if (templateType.designEngine === 'GPT4O') {
-    // Use GPT-5 for both content and design
+    // Use GPT for both content and design
     const contentResponse = await openai.responses.create({
-      model: "gpt-5-mini",
+      model: OPENAI_FAST_MODEL,
+      reasoning: { effort: OPENAI_FAST_EFFORT },
       input: `You are an expert email marketing copywriter. Write the email in ${multiProductInfo.language} language. Create compelling email content for multiple products based on the template type and product information. Focus ONLY on the copywriting - subject line, headlines, body text, and call-to-action text. Do not include any HTML or styling.
 
 ${templateType.user
@@ -80,8 +90,9 @@ Please return ONLY a JSON object with:
   } else {
     // Use Claude for content generation
     const contentResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      model: CLAUDE_MODEL,
+      max_tokens: CLAUDE_MAX_TOKENS,
+      thinking: CLAUDE_THINKING,
       messages: [
         {
           role: "user",
@@ -124,7 +135,9 @@ Please return ONLY a JSON object with:
       ]
     });
 
-    let rawContent = contentResponse.content[0].type === "text" ? contentResponse.content[0].text : "{}";
+    // With thinking on, the first block is a thinking block, not the reply.
+    const contentText = contentResponse.content.find((block) => block.type === "text");
+    let rawContent = contentText?.type === "text" ? contentText.text : "{}";
 
     // Handle Claude returning JSON wrapped in markdown code blocks
     if (rawContent.includes("```json")) {
@@ -137,9 +150,10 @@ Please return ONLY a JSON object with:
 
   // Step 2: Generate HTML design using the specified AI engine
   if (templateType.designEngine === 'GPT4O') {
-    // Use GPT-5 for HTML generation
+    // Use GPT for HTML generation
     const designResponse = await openai.responses.create({
-      model: "gpt-5.2",
+      model: OPENAI_MAIN_MODEL,
+      reasoning: { effort: OPENAI_MAIN_EFFORT },
       input: `You are an expert HTML email developer. Create responsive, cross-client compatible email templates.
 
 Create a multi-product landing page email template using this content:
@@ -169,8 +183,9 @@ Create a responsive email template that showcases all products effectively with 
   } else {
     // Use Claude for HTML generation
     const designResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      model: CLAUDE_MODEL,
+      max_tokens: CLAUDE_MAX_TOKENS,
+      thinking: CLAUDE_THINKING,
       messages: [
         {
           role: "user",
@@ -236,10 +251,9 @@ REMEMBER: Return ONLY the HTML code. Start with <!DOCTYPE html> immediately. Fol
       ],
     });
 
-    const rawContent =
-      designResponse.content[0].type === "text"
-        ? designResponse.content[0].text
-        : "";
+    // With thinking on, the first block is a thinking block, not the reply.
+    const designText = designResponse.content.find((block) => block.type === "text");
+    const rawContent = designText?.type === "text" ? designText.text : "";
 
     // Since we explicitly asked for HTML only, expect pure HTML
     let htmlContent = rawContent.trim();
