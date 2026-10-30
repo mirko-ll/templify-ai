@@ -10,6 +10,7 @@ import * as cheerio from "cheerio";
 import { ProductInfo, MultiProductInfo, TemplateType } from "../../types/types";
 import { generateMultiProductTemplate } from "../../utils/multiProductTemplate";
 import { formatPriceLike } from "@/lib/product-links";
+import { parsePriceNumber } from "@/lib/campaign-plan-generation";
 import { cleanProductImages, isProductImageUrl } from "@/lib/product-images";
 import {
   CLAUDE_MAX_TOKENS,
@@ -346,6 +347,15 @@ export async function POST(request: Request) {
             rawPrice.trim(),
             result.productInfo.regularPrice ?? ""
           );
+          // The scraped discount badge belongs to the page's own static price,
+          // not the URL price — recompute it so the email's "−N%" matches the
+          // two prices it shows (HR said −49% on 74,99 € → 14,99 €). Floored so
+          // the saving is never overstated.
+          const regular = parsePriceNumber(result.productInfo.regularPrice);
+          const sale = parsePriceNumber(result.productInfo.salePrice);
+          if (regular && sale && regular > sale) {
+            result.productInfo.discount = `${Math.floor((1 - sale / regular) * 100)}%`;
+          }
         }
       }
 
