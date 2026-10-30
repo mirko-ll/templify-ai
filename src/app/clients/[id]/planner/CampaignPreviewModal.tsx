@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { InlineLoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 
 interface CountryTarget {
@@ -84,6 +86,11 @@ export function CampaignPreviewModal({
   const [error, setError] = useState<string | null>(null);
   const [campaign, setCampaign] = useState<CampaignDetails | null>(null);
   const [activeTargetId, setActiveTargetId] = useState<string | null>(null);
+  const [confirmingPush, setConfirmingPush] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  // Bumped after a push so the effect below reloads the push badges.
+  const [reloadKey, setReloadKey] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     if (!open || !campaignId) return;
@@ -137,7 +144,11 @@ export function CampaignPreviewModal({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [open, clientId, campaignId]);
+  }, [open, clientId, campaignId, reloadKey]);
+
+  useEffect(() => {
+    if (!open) setConfirmingPush(false);
+  }, [open]);
 
   const target =
     campaign?.countryTargets.find((t) => t.id === activeTargetId) ??
@@ -145,6 +156,51 @@ export function CampaignPreviewModal({
     null;
 
   const sendLabel = formatDateTime(campaign?.sentAt ?? campaign?.scheduledAt ?? null);
+
+  const unpushedCount =
+    campaign?.countryTargets.filter((t) => !t.isPushed && t.preparedHtml).length ?? 0;
+  const canPushNow =
+    campaign?.status === "SCHEDULED" &&
+    unpushedCount > 0 &&
+    Boolean(campaign.scheduledAt) &&
+    new Date(campaign.scheduledAt as string).getTime() > Date.now();
+
+  const pushNow = async () => {
+    if (!campaign) return;
+    setPushing(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/campaigns/${campaign.id}/push-now`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to push the campaign");
+      }
+      const pushed: string[] = payload.pushed ?? [];
+      const failed: { countryCode: string }[] = payload.failed ?? [];
+      if (failed.length > 0) {
+        toast.error(
+          `Pushed ${pushed.length}, failed ${failed.length}`,
+          `Not pushed: ${failed.map((f) => f.countryCode).join(", ")}. The cron retries them ~2h before send.`
+        );
+      } else {
+        toast.success(
+          "Pushed to SqualoMail",
+          `${pushed.length} newsletter${pushed.length === 1 ? "" : "s"} handed over; they still send at the scheduled time.`
+        );
+      }
+    } catch (err) {
+      toast.error(
+        "Couldn't push the campaign",
+        err instanceof Error ? err.message : undefined
+      );
+    } finally {
+      setPushing(false);
+      setConfirmingPush(false);
+      setReloadKey((key) => key + 1);
+    }
+  };
 
   return (
     <Modal
@@ -179,6 +235,36 @@ export function CampaignPreviewModal({
             </div>
           ) : (
             <>
+              {canPushNow && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-muted/40 px-4 py-3 text-sm">
+                  <span className="text-muted">
+                    {confirmingPush
+                      ? "Push now? The send time stays the same, but the day can no longer be unscheduled or regenerated."
+                      : `${unpushedCount} of ${campaign.countryTargets.length} newsletters are waiting for the automatic push ~2h before send.`}
+                  </span>
+                  <div className="flex gap-2">
+                    {confirmingPush && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmingPush(false)}
+                        disabled={pushing}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      variant={confirmingPush ? "primary" : "secondary"}
+                      size="sm"
+                      isLoading={pushing}
+                      onClick={() => (confirmingPush ? void pushNow() : setConfirmingPush(true))}
+                    >
+                      {confirmingPush ? "Push to SqualoMail" : "Push now"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-1.5">
                 {campaign.countryTargets.map((t) => (
                   <button
