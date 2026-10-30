@@ -11,7 +11,12 @@ import { ProductInfo, MultiProductInfo, TemplateType } from "../../types/types";
 import { generateMultiProductTemplate } from "../../utils/multiProductTemplate";
 import { formatPriceLike } from "@/lib/product-links";
 import { parsePriceNumber } from "@/lib/campaign-plan-generation";
-import { cleanProductImages, isProductImageUrl } from "@/lib/product-images";
+import { cleanProductImages, isProductImageUrl, pickSecondImage } from "@/lib/product-images";
+import {
+  fetchShopReviews,
+  templateWantsReviews,
+  templateWantsSecondImage,
+} from "@/lib/product-reviews";
 import {
   CLAUDE_MAX_TOKENS,
   CLAUDE_MODEL,
@@ -799,7 +804,32 @@ Return ONLY: {"language": "en", "title": "", "description": "", "regularPrice": 
     discount: extractedData.discount || "",
   };
 
+  // Only templates that quote the shop's rating/reviews pay for the extra fetch.
+  if (templateWantsReviews(templateType.user)) {
+    Object.assign(productInfo, await fetchShopReviews(data));
+  }
+
   return cleanProductImages(productInfo);
+}
+
+/**
+ * Product Details lines only opted-in templates receive (see
+ * lib/product-reviews.ts): a second text-free photo, and the shop's own rating
+ * and short reviews exactly as the product page publishes them.
+ */
+function optInProductDetails(productInfo: ProductInfo, templateText: string | undefined): string {
+  const lines: string[] = [];
+  if (templateWantsSecondImage(templateText)) {
+    const second = pickSecondImage(productInfo);
+    if (second) lines.push(`- Second Image: ${second}`);
+  }
+  if (templateWantsReviews(templateText) && productInfo.rating && productInfo.reviewCount) {
+    lines.push(`- Rating: ${productInfo.rating} / 5 (${productInfo.reviewCount} reviews)`);
+    for (const review of productInfo.reviews ?? []) {
+      lines.push(`- Customer Review: "${review.text}" — ${review.name} (${review.rating}/5)`);
+    }
+  }
+  return lines.length > 0 ? `\n${lines.join("\n")}` : "";
 }
 
 async function processMultipleUrls(
@@ -947,7 +977,7 @@ Example: {{product_image}} not appearing in the template means we do not have a 
 - Regular Price: ${productInfo.regularPrice}
 - Sale Price: ${productInfo.salePrice}
 - Discount: ${productInfo.discount}
-- Link: ${productUrl}
+- Link: ${productUrl}${optInProductDetails(productInfo, templateType.user)}
 
 CRITICAL: For unsubscribe link, use EXACTLY this format: {unsubscribe}UNSUBSCRIBE{/unsubscribe} - do NOT use href attribute.
 
@@ -1022,7 +1052,7 @@ Example: {{product_image}} not appearing in the template means we do not have a 
 - Regular Price: ${productInfo.regularPrice}
 - Sale Price: ${productInfo.salePrice}
 - Discount: ${productInfo.discount}
-- Link: ${productUrl}
+- Link: ${productUrl}${optInProductDetails(productInfo, templateType.user)}
 
 CRITICAL: For unsubscribe link, use EXACTLY this format: {unsubscribe}UNSUBSCRIBE{/unsubscribe} - do NOT use href attribute.
 

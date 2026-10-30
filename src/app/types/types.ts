@@ -7,6 +7,16 @@ export interface ProductInfo {
     regularPrice: string;
     salePrice: string;
     discount: string;
+    /** Shop's average product rating ("4.6") — only for templates that opt in. */
+    rating?: string;
+    reviewCount?: string;
+    reviews?: ProductReview[];
+}
+
+export interface ProductReview {
+    name: string;
+    text: string;
+    rating: number;
 }
 
 export interface MultiProductInfo {

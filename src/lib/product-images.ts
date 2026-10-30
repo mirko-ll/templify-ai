@@ -32,6 +32,29 @@ export function cleanProductImages<
   };
 }
 
+/**
+ * A second, text-free photo of the same product for templates that show two
+ * images. Shop galleries mix in language-specific infographics ("-EN-", "-HR-"),
+ * thumbnails and even other products, so only neutral "-N-" files sharing the
+ * hero's product code qualify. Returns "" when none does.
+ */
+export function pickSecondImage(info: { images?: string[]; bestImageUrl?: string }): string {
+  const best = info.bestImageUrl ?? "";
+  const code = (best.split("/").pop() ?? "").split(/[-_]/)[0].toUpperCase();
+  if (code.length < 3) return "";
+  return (
+    (info.images ?? []).find((url) => {
+      const file = url.split("/").pop() ?? "";
+      return (
+        url !== best &&
+        file.toUpperCase().startsWith(`${code}-`) &&
+        /-N-/i.test(file) &&
+        !/-\d+x\d+\./.test(file)
+      );
+    }) ?? ""
+  );
+}
+
 type StoredCountryResult = {
   productInfo?: { images?: unknown; bestImageUrl?: unknown };
   multiProductInfo?: { products?: unknown };
