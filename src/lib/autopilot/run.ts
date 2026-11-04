@@ -16,6 +16,18 @@ const STALE_RUN_MS = 30 * 60_000;
 
 export type RunKind = "NIGHTLY" | "MANUAL";
 
+export interface RunOptions {
+  /** Re-pick every unapproved Autopilot pick in the window, with this reason. */
+  repickAll?: string;
+}
+
+/**
+ * Settings saved while a run is going: that run already read the old settings,
+ * so one more run follows it (per client, options merged). In-process only —
+ * a restart drops it, and the nightly run catches up.
+ */
+const followUps = new Map<string, RunOptions>();
+
 export interface RunStats {
   reconcile?: ReconcileStats;
   emailStats?: number;
@@ -48,7 +60,7 @@ export async function startRun(clientId: string, kind: RunKind): Promise<string 
 }
 
 /** Execute a started run to completion (never throws; failures are logged on the run). */
-export async function executeRun(runId: string, clientId: string, kind: RunKind, opts: { repickAll?: string } = {}) {
+export async function executeRun(runId: string, clientId: string, kind: RunKind, opts: RunOptions = {}) {
   const stats: RunStats = {};
   const errors: string[] = [];
   try {
@@ -100,6 +112,24 @@ export async function executeRun(runId: string, clientId: string, kind: RunKind,
       },
     });
   }
+
+  const next = followUps.get(clientId);
+  if (next) {
+    followUps.delete(clientId);
+    const nextId = await startRun(clientId, "MANUAL");
+    if (nextId) await executeRun(nextId, clientId, "MANUAL", next);
+  }
+}
+
+/** Start a run now, or queue it right after the one that is going. */
+export async function requestRun(clientId: string, opts: RunOptions = {}) {
+  const runId = await startRun(clientId, "MANUAL");
+  if (runId) {
+    void executeRun(runId, clientId, "MANUAL", opts);
+    return;
+  }
+  const queued = followUps.get(clientId) ?? {};
+  followUps.set(clientId, { repickAll: queued.repickAll ?? opts.repickAll });
 }
 
 /** Nightly: every client whose Autopilot is on (or in shadow), one after another. */

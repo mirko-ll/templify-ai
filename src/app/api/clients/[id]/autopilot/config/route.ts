@@ -19,7 +19,7 @@ import {
   rebuildRotationFromWeights,
   weightsFromRotation,
 } from "@/lib/autopilot/rotation";
-import { executeRun, recentRuns, startRun } from "@/lib/autopilot/run";
+import { recentRuns, requestRun } from "@/lib/autopilot/run";
 import { ensureConfig, latestPlanDefaults, loadStoredIntel, settingsOf } from "@/lib/autopilot/store";
 import { mondayOf } from "@/lib/autopilot/time";
 
@@ -183,17 +183,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Settings that change what a slot should be re-plan the open days right away
     // (unapproved Autopilot picks only), instead of waiting for the night run.
+    // A run already going read the old settings, so this one queues behind it.
     const replans = ["mode", "rotation", "weights", "seasons", "rules", "slotTimes", "rotationStart", "intel"].some(
       (key) => body[key] !== undefined
     );
-    let replanning = false;
-    if (replans && updated.mode !== "OFF") {
-      const runId = await startRun(id, "MANUAL");
-      if (runId) {
-        void executeRun(runId, id, "MANUAL", intelChanged ? { repickAll: "competitor brands changed" } : {});
-        replanning = true;
-      }
-    }
+    const replanning = replans && updated.mode !== "OFF";
+    if (replanning) await requestRun(id, intelChanged ? { repickAll: "competitor brands changed" } : {});
     return NextResponse.json({ mode: updated.mode, settings: settingsOf(updated), replanning });
   } catch (error) {
     return errorResponse(error);
