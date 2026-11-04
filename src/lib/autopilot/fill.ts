@@ -152,7 +152,13 @@ export interface FillStats {
  */
 export async function fillClient(
   clientId: string,
-  opts: { now?: Date; refresh?: boolean; openai?: OpenAI | null } = {}
+  opts: {
+    now?: Date;
+    refresh?: boolean;
+    openai?: OpenAI | null;
+    /** Re-pick every unapproved Autopilot pick in the window (e.g. the competitor brands changed). */
+    repickAll?: string;
+  } = {}
 ): Promise<FillStats> {
   const now = opts.now ?? new Date();
   const { input, config, intel } = await buildEngineInput(clientId, { now, refresh: opts.refresh });
@@ -177,13 +183,18 @@ export async function fillClient(
       redo.set(key, { slot, why: "" });
       continue;
     }
-    // The plan for this slot changed (share, grid, mix, week start): an unapproved
-    // Autopilot pick is re-picked. Approved / hand-picked / re-bucketed slots stay.
+    // The plan for this slot changed (share, grid, mix, week start) or the evidence
+    // behind every pick did (repickAll): an unapproved Autopilot pick is re-picked.
+    // Approved / hand-picked / re-bucketed slots stay.
     if (
       slot.state === "PROPOSED" &&
       slot.pickedBy === "AUTOPILOT" &&
       !eventsOf(slot).some((e) => e.type === "REBUCKET")
     ) {
+      if (opts.repickAll) {
+        redo.set(key, { slot, why: opts.repickAll });
+        continue;
+      }
       const nowPlanned = plannedBucketFor(settings.rotation, settings.rotationStart, settings.seasons, slot.date, slot.slotIndex).bucket;
       if (nowPlanned !== slot.plannedBucket) {
         redo.set(key, { slot, why: `settings changed — this send is now ${BUCKET_LABELS[nowPlanned]}` });

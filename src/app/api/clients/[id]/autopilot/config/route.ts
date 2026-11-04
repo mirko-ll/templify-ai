@@ -175,6 +175,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: `Unknown timezone: ${body.timezone}` }, { status: 400 });
     }
 
+    // New competitor brands change the evidence behind every pick, not just one slot's bucket.
+    const intelChanged =
+      body.intel !== undefined && JSON.stringify(normalizeIntel(body.intel)) !== JSON.stringify(current.intel);
+
     const updated = await prisma.autopilotConfig.update({ where: { clientId: id }, data });
 
     // Settings that change what a slot should be re-plan the open days right away
@@ -186,7 +190,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (replans && updated.mode !== "OFF") {
       const runId = await startRun(id, "MANUAL");
       if (runId) {
-        void executeRun(runId, id, "MANUAL");
+        void executeRun(runId, id, "MANUAL", intelChanged ? { repickAll: "competitor brands changed" } : {});
         replanning = true;
       }
     }

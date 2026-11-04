@@ -48,7 +48,7 @@ export async function startRun(clientId: string, kind: RunKind): Promise<string 
 }
 
 /** Execute a started run to completion (never throws; failures are logged on the run). */
-export async function executeRun(runId: string, clientId: string, kind: RunKind) {
+export async function executeRun(runId: string, clientId: string, kind: RunKind, opts: { repickAll?: string } = {}) {
   const stats: RunStats = {};
   const errors: string[] = [];
   try {
@@ -76,7 +76,7 @@ export async function executeRun(runId: string, clientId: string, kind: RunKind)
         errors.push(`lock: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    stats.fill = await fillClient(clientId, { refresh: true });
+    stats.fill = await fillClient(clientId, { refresh: true, repickAll: opts.repickAll });
     if (stats.fill.intel.error) errors.push(`intel: ${stats.fill.intel.error}`);
 
     await prisma.autopilotRun.update({

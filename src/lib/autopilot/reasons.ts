@@ -181,6 +181,8 @@ A "Relaunched" product is an older one the shop has just started advertising: pr
 A "Discovery" slot tries a good catalog product that has never been emailed: say what makes it worth a first try (stocked widely, a category the emails have skipped lately, fits the season) — no sales figures exist for it.
 Always say whose ads a figure is: "your ads" for the shop's own, or the competitor's name (e.g. "Soldius has 42 ads on it") — never just "42 ads". A product only a competitor advertises is one the shop sells but doesn't advertise yet; you can say so.
 
+Figures marked "you" / "your" are the shop's own ads: write "your ads", never the shop's name. Talk only about the option you chose — don't describe or guess the products in other slots.
+
 Choose a different product for every slot.
 
 Slots:
