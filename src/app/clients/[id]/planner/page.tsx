@@ -22,6 +22,7 @@ import { MonthCalendar } from "./MonthCalendar";
 import { DayEditor } from "./DayEditor";
 import { CampaignPreviewModal } from "./CampaignPreviewModal";
 import { TopSellersPanel } from "./TopSellersPanel";
+import { AutopilotWeek } from "./AutopilotWeek";
 import {
   DEFAULT_PLANNER_DEFAULTS,
   assignmentId,
@@ -63,6 +64,8 @@ interface PlanItemResponse {
 
 interface PlanResponse {
   id: string;
+  /** Bumped on every write — sent back with saves so a stale tab can't overwrite newer picks. */
+  revision?: number;
   strategy: { defaults?: Partial<PlannerDefaults> } | null;
   items: PlanItemResponse[];
 }
@@ -179,6 +182,10 @@ export default function PlannerPage() {
   const [performance, setPerformance] = useState<PerformanceData | null>(null);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The loaded plan's revision (a ref: saves are debounced callbacks). */
+  const revisionRef = useRef<number | null>(null);
+  /** Reloads the viewed month — set below once loadPlan exists. */
+  const reloadRef = useRef<(() => void) | null>(null);
 
   const counts = useMemo(() => {
     const acc = { planned: 0, scheduled: 0, failed: 0, busy: 0 };
@@ -311,13 +318,20 @@ export default function PlannerPage() {
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ defaults: currentDefaults, items }),
+            body: JSON.stringify({ defaults: currentDefaults, items, revision: revisionRef.current ?? undefined }),
           }
         );
+        const payload = await response.json().catch(() => ({}));
+        if (response.status === 409 && payload?.code === "STALE_REVISION") {
+          // The Autopilot (or another tab) changed the plan — show the latest instead of overwriting it.
+          toast.error("The plan was updated meanwhile", payload.error);
+          reloadRef.current?.();
+          return;
+        }
         if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
           throw new Error(payload?.error || "Failed to save plan");
         }
+        if (typeof payload?.plan?.revision === "number") revisionRef.current = payload.plan.revision;
       } catch (err) {
         toast.error(
           "Couldn't save the plan",
@@ -355,6 +369,7 @@ export default function PlannerPage() {
         );
       const plan = candidates[0] ?? null;
       if (!plan) {
+        revisionRef.current = null;
         setPlanId(null);
         setDefaults(DEFAULT_PLANNER_DEFAULTS);
         setAssignments([]);
@@ -364,12 +379,24 @@ export default function PlannerPage() {
         ...DEFAULT_PLANNER_DEFAULTS,
         ...(plan.strategy?.defaults ?? {}),
       };
+      revisionRef.current = typeof plan.revision === "number" ? plan.revision : null;
       setPlanId(plan.id);
       setDefaults(planDefaults);
       setAssignments(buildAssignments(plan.items));
     },
     [clientId]
   );
+
+  useEffect(() => {
+    reloadRef.current = () => {
+      loadPlan(viewYear, viewMonth).catch((err) =>
+        toast.error("Couldn't reload the plan", err instanceof Error ? err.message : undefined)
+      );
+    };
+  }, [loadPlan, viewYear, viewMonth, toast]);
+
+  /** Autopilot wrote into the plan (ON mode) — show its items in the calendar. */
+  const handleAutopilotChanged = useCallback(() => reloadRef.current?.(), []);
 
   /** Create (or reuse) the month's plan row — only called when an edit happens. */
   const ensurePlan = useCallback(async (): Promise<string> => {
@@ -384,6 +411,7 @@ export default function PlannerPage() {
       throw new Error(payload?.error || "Failed to create monthly plan");
     }
     const plan = payload.plan as PlanResponse;
+    revisionRef.current = typeof plan.revision === "number" ? plan.revision : null;
     setPlanId(plan.id);
     return plan.id;
   }, [clientId, planId, viewYear, viewMonth]);
@@ -796,6 +824,15 @@ export default function PlannerPage() {
             </div>
           </div>
         )}
+
+        <div className="mt-6">
+          <AutopilotWeek
+            clientId={clientId}
+            eligible={eligible}
+            onPlanChanged={handleAutopilotChanged}
+            onPreview={(campaignId, label) => setPreview({ campaignId, label })}
+          />
+        </div>
 
         <div className="mt-6">
           <PlannerDefaultsPanel

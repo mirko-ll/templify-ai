@@ -177,6 +177,15 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  // Optimistic locking: the Autopilot writes into the same plan overnight, so a
+  // planner tab opened before that must not silently delete its picks.
+  if (typeof body?.revision === "number" && body.revision !== existing.revision) {
+    return NextResponse.json(
+      { error: "This plan changed since you opened it (the Autopilot or another tab). Reloaded the latest version.", code: "STALE_REVISION" },
+      { status: 409 }
+    );
+  }
+
   const defaults = {
     templateId: str(body?.defaults?.templateId),
     subject: typeof body?.defaults?.subject === "string" ? body.defaults.subject : "",
@@ -190,6 +199,11 @@ export async function PUT(
       typeof body?.defaults?.senderName === "string" ? body.defaults.senderName : "",
     mailingListOverrides: normalizeListOverrides(body?.defaults?.mailingListOverrides),
   };
+
+  const existingStrategy =
+    existing.strategy && typeof existing.strategy === "object" && !Array.isArray(existing.strategy)
+      ? (existing.strategy as Record<string, unknown>)
+      : {};
 
   const lockedItems = existing.items.filter((item) =>
     (LOCKED_STATUSES as readonly string[]).includes(item.status)
@@ -310,7 +324,11 @@ export async function PUT(
     ),
     prisma.campaignPlan.update({
       where: { id: planId },
-      data: { strategy: { defaults } as Prisma.InputJsonValue },
+      // Merge: other strategy keys (e.g. the Autopilot's) survive a planner save.
+      data: {
+        strategy: { ...existingStrategy, defaults } as Prisma.InputJsonValue,
+        revision: { increment: 1 },
+      },
     }),
   ]);
 

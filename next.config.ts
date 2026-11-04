@@ -81,6 +81,32 @@ if (
       console.error('[CRON] Failed to start nightly product sync:', error);
     }
   });
+
+  // Email Autopilot at 06:00 Ljubljana time — after the 03:00 product sync and
+  // oadmin's 03:30 Ad Library sync (aggregates usually done ~04:10; 06:00 leaves
+  // room for a slow night). Locks + generates
+  // the day that is due and fills the rolling window (src/lib/autopilot/run.ts).
+  const appUrl =
+    process.env.NEXTAUTH_URL || process.env.APP_URL || `http://localhost:${process.env.PORT || 3002}`;
+  cron.schedule(
+    '0 6 * * *',
+    async () => {
+      try {
+        const response = await fetch(`${appUrl}/api/internal/autopilot/nightly`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${process.env.TEMPLAITO_SERVICE_TOKEN}` },
+        });
+        if (!response.ok) {
+          console.error(`[CRON] Autopilot nightly failed with status ${response.status}`);
+        } else {
+          console.log('[CRON] Autopilot nightly started');
+        }
+      } catch (error) {
+        console.error('[CRON] Failed to start the Autopilot nightly run:', error);
+      }
+    },
+    { timezone: 'Europe/Ljubljana' }
+  );
 }
 
 export default config;

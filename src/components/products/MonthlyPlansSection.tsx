@@ -5,7 +5,7 @@ import {
   SparklesIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeader } from "@/components/ui/page-header";
@@ -32,19 +32,15 @@ export function MonthlyPlansSection({
     <div className="space-y-4">
       <SectionHeader
         title="Monthly plans"
-        description="Plan a product for each day of the month, or let Templaito suggest products for review."
+        description="Plan a product for each day of the month, or let the Autopilot pick them for your review."
         actions={
           <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onCreatePlan("ASSISTED")}
-              disabled={creatingPlan !== null}
-              isLoading={creatingPlan === "ASSISTED"}
-              leftIcon={<SparklesIcon className="h-4 w-4" />}
-            >
-              Assisted suggestion
-            </Button>
+            {/* The Autopilot replaced the old "assisted suggestion" plan. Plain link: the
+                client page reads ?tab= on load. */}
+            <a href="?tab=autopilot" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              <SparklesIcon className="h-4 w-4" />
+              Autopilot
+            </a>
             <Button
               size="sm"
               onClick={() => onOpenPlanner()}

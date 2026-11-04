@@ -222,6 +222,12 @@ model Client {
   productSyncRuns ProductSyncRun[]
   campaignPlans  CampaignPlan[]
   performanceReports ProductPerformanceReport[]
+  autopilotConfig     AutopilotConfig?
+  autopilotSlots      AutopilotSlot[]
+  autopilotCandidates AutopilotCandidate[]
+  competitorSignals   CompetitorSignal[]
+  autopilotRuns       AutopilotRun[]
+  priceTests          PriceTest[]
 
   @@index([userId])
   @@index([isArchived])
@@ -308,6 +314,11 @@ model CampaignCountry {
   preparedFromName  String?
   preparedName      String?
   isPushed          Boolean @default(false)
+  /// SqualoMail results for this country's newsletter (refreshed until ~3 days after sending).
+  statsSent         Int?
+  statsOpens        Int?
+  statsClicks       Int?
+  statsFetchedAt    DateTime?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   country  Country  @relation(fields: [countryCode], references: [code], onDelete: Restrict)
@@ -467,6 +478,9 @@ model CampaignPlan {
   status      CampaignPlanStatus @default(DRAFT)
   strategy    Json?
   approvedAt  DateTime?
+  /// Bumped on every write to the plan's items (planner PUT, Autopilot), so a
+  /// stale planner tab can't silently overwrite newer picks.
+  revision    Int                @default(0)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -558,6 +572,157 @@ model CampaignPlanItem {
   @@index([planId])
   @@index([productId])
   @@index([campaignId])
+}
+
+/**
+ * Per-client Autopilot settings: which buckets fill which send slots (4-week
+ * rotation), the picking rules, seasons and the oadmin competitor-intel brands.
+ */
+model AutopilotConfig {
+  id            String        @id @default(cuid())
+  clientId      String        @unique
+  mode          AutopilotMode @default(OFF)
+  timezone      String        @default("Europe/Ljubljana")
+  slotTimes     Json // ["08:00","17:00"] local
+  rotation      Json // [4 weeks][7 days][slots] -> AutopilotBucket
+  rotationStart DateTime // Monday (00:00 UTC of the local date) of rotation week 1
+  weights       Json // { BEST_SELLER: 25, ... } percent
+  rules         Json
+  seasons       Json
+  intel         Json // { ownBrandId, competitorBrandIds[] } (oadmin competitorBrand ids)
+  defaults      Json // planner defaults: templateId, subject, preheader, senderName, mailingListOverrides
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * One Autopilot send slot (client + local day + slot index). Holds the pick, why
+ * it was made and its approval; the email itself is a regular CampaignPlanItem
+ * at `sendAt` with the same groupKey.
+ */
+model AutopilotSlot {
+  id             String             @id @default(cuid())
+  clientId       String
+  date           String // local YYYY-MM-DD
+  slotIndex      Int
+  sendAt         DateTime
+  plannedBucket  AutopilotBucket
+  bucket         AutopilotBucket
+  state          AutopilotSlotState @default(PROPOSED)
+  groupKey       String?
+  pickedBy       AutopilotPickedBy  @default(AUTOPILOT)
+  reason         String?            @db.Text
+  signals        Json?
+  alternatives   Json?
+  priceOverride  String?
+  priceSuggested Boolean            @default(false)
+  /// Picked in SHADOW mode: no CampaignPlanItem was written for it (yet).
+  shadow         Boolean            @default(false)
+  autoApproved   Boolean            @default(false)
+  approvedAt     DateTime?
+  approvedById   String?
+  lockedAt       DateTime?
+  events         Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, date, slotIndex])
+  @@index([clientId, sendAt])
+}
+
+/** Nightly snapshot of each bucket's ranked candidates (replaced per client). */
+model AutopilotCandidate {
+  id         String          @id @default(cuid())
+  clientId   String
+  computedAt DateTime
+  bucket     AutopilotBucket
+  groupKey   String
+  baseKey    String
+  score      Float
+  signals    Json
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, bucket, score])
+}
+
+/** Latest oadmin competitor-intel row per brand product, matched to this client's catalog. */
+model CompetitorSignal {
+  id                String    @id @default(cuid())
+  clientId          String
+  brandId           String
+  brandName         String
+  isOwnBrand        Boolean   @default(false)
+  productKey        String
+  token             String?
+  name              String?   @db.Text
+  baseKey           String?
+  groupKey          String?
+  activeAds         Int       @default(0)
+  totalAds          Int       @default(0)
+  newAds7d          Int       @default(0)
+  newAds30d         Int       @default(0)
+  reach             Int       @default(0)
+  reach7d           Int       @default(0)
+  score             Float     @default(0)
+  listedSince       DateTime?
+  listedSinceSource String?
+  firstAdAt         DateTime?
+  lastAdAt          DateTime?
+  imageUrl          String?   @db.Text
+  fetchedAt         DateTime
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, brandId, productKey])
+  @@index([clientId, baseKey])
+}
+
+/**
+ * One Autopilot price test: a best seller's repeat send at a slightly higher
+ * price, judged by margin-weighted clicks against its earlier sends (and later
+ * by the monthly sales report).
+ */
+model PriceTest {
+  id         String          @id @default(cuid())
+  clientId   String
+  groupKey   String
+  basePrice  String
+  testPrice  String
+  status     PriceTestStatus @default(RUNNING)
+  slotId     String?
+  campaignId String?
+  sendAt     DateTime
+  baseline   Json?
+  result     Json?
+  decision   String?         @db.Text
+  decidedAt  DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, groupKey])
+  @@index([status])
+}
+
+model AutopilotRun {
+  id         String    @id @default(cuid())
+  clientId   String?
+  kind       String // NIGHTLY | MANUAL
+  status     String // RUNNING | SUCCESS | PARTIAL | FAILED
+  stats      Json?
+  error      String?   @db.Text
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, startedAt])
 }
 
 enum DesignEngine {
@@ -652,4 +817,38 @@ enum CampaignPlanItemStatus {
   GENERATING
   SCHEDULED
   FAILED
+}
+
+enum AutopilotMode {
+  OFF
+  SHADOW
+  ON
+}
+
+enum AutopilotBucket {
+  BEST_SELLER
+  NEW_PRODUCT
+  FB_WINNER
+  SEASONAL
+  DISCOVERY
+}
+
+enum AutopilotSlotState {
+  PROPOSED
+  APPROVED
+  SKIPPED
+  EMPTY
+  LOCKED
+}
+
+enum AutopilotPickedBy {
+  AUTOPILOT
+  USER
+}
+
+enum PriceTestStatus {
+  RUNNING
+  KEPT
+  REVERTED
+  CANCELLED
 }

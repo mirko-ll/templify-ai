@@ -4,15 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { denyUnlessClientAccess } from "@/lib/client-access";
-import { buildCampaignUrl, type CampaignUrlRule } from "@/lib/product-links";
-import {
-  groupProducts,
-  type GroupableProduct,
-  type ProductGroup,
-} from "@/lib/product-grouping";
-
-/** Offer info (title, description, image) is shown from this country when present. */
-const PREFERRED_INFO_COUNTRY = "SI";
+import { loadProductGroups } from "@/lib/product-groups";
 
 /**
  * Translate the `status` query into a Prisma filter.
@@ -137,65 +129,7 @@ export async function GET(
     .filter((key): key is string => Boolean(key));
 
   // Phase 2: load full products only for this page's offers, then shape them.
-  const products =
-    pageKeys.length > 0
-      ? await prisma.product.findMany({
-          where: { clientId: id, ...statusFilter(status), groupKey: { in: pageKeys } },
-          include: {
-            images: { orderBy: { rank: "asc" }, take: 20 },
-            listings: {
-              orderBy: [{ countryCode: "asc" }, { updatedAt: "desc" }],
-              take: 30,
-              include: { source: { select: { id: true, name: true, config: true } } },
-            },
-          },
-        })
-      : [];
-
-  const groupable: GroupableProduct[] = products.map((product) => ({
-    id: product.id,
-    title: product.title,
-    normalizedTitle: product.normalizedTitle,
-    description: product.description,
-    bestImageUrl: product.bestImageUrl,
-    category: product.category,
-    status: product.status,
-    updatedAt: product.updatedAt?.toISOString() ?? null,
-    lastSeenAt: product.lastSeenAt?.toISOString() ?? null,
-    images: product.images.map((image) => ({ url: image.url })),
-    listings: product.listings.map((listing) => {
-      const rule =
-        listing.source?.config &&
-        typeof listing.source.config === "object" &&
-        !Array.isArray(listing.source.config)
-          ? (listing.source.config as CampaignUrlRule)
-          : null;
-      return {
-        id: listing.id,
-        productId: product.id,
-        countryCode: listing.countryCode,
-        title: listing.title,
-        normalizedTitle: product.normalizedTitle,
-        url: listing.url,
-        campaignUrl: buildCampaignUrl({ product, listing, rule }),
-        campaignUrlRule: rule,
-        slug: listing.slug,
-        priceRaw: listing.priceRaw,
-        regularPrice: listing.regularPrice,
-        salePrice: listing.salePrice,
-        currency: listing.currency,
-        availability: listing.availability,
-      };
-    }),
-  }));
-
-  // Preserve the phase-1 ordering (groupProducts re-derives the same key).
-  const byKey = new Map<string, ProductGroup>();
-  for (const group of groupProducts(groupable, PREFERRED_INFO_COUNTRY))
-    byKey.set(group.key, group);
-  const groups = pageKeys
-    .map((key) => byKey.get(key))
-    .filter((group): group is ProductGroup => Boolean(group));
+  const groups = await loadProductGroups(id, pageKeys, statusFilter(status));
 
   // Facets: every country the client has a listing in, every category the
   // catalog knows + per-status product counts.

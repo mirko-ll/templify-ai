@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { callTemplaitoBackend } from "@/lib/templaito-backend";
 import { pickCanonicalListing } from "@/lib/product-grouping";
 import { buildCampaignUrl, type CampaignUrlRule } from "@/lib/product-links";
+import { parsePriceNumber } from "@/lib/price-number";
 
 /**
  * Background worker that turns a monthly campaign plan's items into scheduled
@@ -73,21 +74,7 @@ function snapshotTitle(snapshot: unknown): string | undefined {
   return undefined;
 }
 
-/** Parse a European-format price string ("519 Kč", "62,99€", "4.990 Ft") to a number. */
-export function parsePriceNumber(value: string | null | undefined): number | null {
-  const cleaned = (value ?? "").replace(/[^\d.,]/g, "");
-  if (!cleaned) return null;
-  let normalized = cleaned;
-  if (cleaned.includes(",") && cleaned.includes(".")) {
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (cleaned.includes(",")) {
-    normalized = cleaned.replace(",", ".");
-  } else if (/^\d{1,3}(\.\d{3})+$/.test(cleaned)) {
-    normalized = cleaned.replace(/\./g, "");
-  }
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
+export { parsePriceNumber };
 
 /** What currency a listing's scraped prices are in: EUR, something else, or unknown. */
 function listingCurrency(listing: SnapshotListing): "EUR" | "OTHER" | null {

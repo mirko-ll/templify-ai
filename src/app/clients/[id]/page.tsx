@@ -8,10 +8,12 @@ import {
   CubeIcon,
   GlobeAltIcon,
   PuzzlePieceIcon,
+  SparklesIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import ProductsBrowser from "@/components/products/ProductsBrowser";
 import PlanningSection from "@/components/products/PlanningSection";
+import { AutopilotSettings } from "@/components/autopilot/AutopilotSettings";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Modal, useConfirm } from "@/components/ui/dialog";
@@ -29,7 +31,7 @@ import type {
   SqualoIntegration,
 } from "./types";
 
-const TAB_KEYS = ["overview", "products", "planning", "integrations", "countries"];
+const TAB_KEYS = ["overview", "products", "planning", "autopilot", "integrations", "countries"];
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
@@ -400,6 +402,12 @@ export default function ClientDetailPage() {
       label: "Planning",
       icon: <CalendarDaysIcon className="h-4 w-4" />,
       content: <PlanningSection clientId={client.id} />,
+    },
+    {
+      key: "autopilot",
+      label: "Autopilot",
+      icon: <SparklesIcon className="h-4 w-4" />,
+      content: <AutopilotSettings clientId={client.id} />,
     },
     {
       key: "integrations",
