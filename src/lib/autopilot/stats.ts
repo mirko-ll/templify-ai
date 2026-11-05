@@ -15,7 +15,13 @@ const STATS_LOOKBACK_DAYS = 60;
 const STATS_FINAL_AFTER_DAYS = 3;
 /** Wait this long after sending before the first fetch. */
 const STATS_FIRST_FETCH_HOURS = 6;
-const MAX_PER_RUN = 600;
+/**
+ * The backend asks SqualoMail one email at a time (4 in parallel) and nginx cuts
+ * a request off at 60s, so emails go in small batches, each saved as it comes back.
+ */
+const BATCH_SIZE = 40;
+/** Stop starting new batches after this long; the rest is fetched the next night. */
+const RUN_BUDGET_MS = 5 * 60_000;
 
 interface NewsletterMetrics {
   sentTotal: number;
@@ -46,25 +52,35 @@ export async function collectEmailStats(clientId: string, now = new Date()): Pro
       // Refresh once a day until the results are final.
       return row.statsFetchedAt.getTime() < sentAt + STATS_FINAL_AFTER_DAYS * DAY && now.getTime() - row.statsFetchedAt.getTime() > 20 * 3_600_000;
     })
-    .slice(0, MAX_PER_RUN);
+    // Newest first: the days just sent matter most (price tests, the panel).
+    .sort((a, b) => (b.campaign.scheduledAt?.getTime() ?? 0) - (a.campaign.scheduledAt?.getTime() ?? 0));
   if (!due.length) return 0;
 
-  const { metrics } = await callTemplaitoBackend<{ metrics: Record<string, NewsletterMetrics | null> }>({
-    path: "/integrations/squalomail/metrics",
-    method: "POST",
-    body: JSON.stringify({ clientId, newsletterIds: due.map((row) => row.externalId) }),
-    signal: AbortSignal.timeout(10 * 60_000),
-  });
-
+  const started = Date.now();
   let updated = 0;
-  for (const row of due) {
-    const m = metrics[row.externalId!];
-    if (!m) continue;
-    await prisma.campaignCountry.update({
-      where: { id: row.id },
-      data: { statsSent: m.sentTotal, statsOpens: m.openTotal, statsClicks: m.clickTotal, statsFetchedAt: now },
-    });
-    updated += 1;
+  for (let i = 0; i < due.length && Date.now() - started < RUN_BUDGET_MS; i += BATCH_SIZE) {
+    const batch = due.slice(i, i + BATCH_SIZE);
+    let metrics: Record<string, NewsletterMetrics | null>;
+    try {
+      ({ metrics } = await callTemplaitoBackend<{ metrics: Record<string, NewsletterMetrics | null> }>({
+        path: "/integrations/squalomail/metrics",
+        method: "POST",
+        body: JSON.stringify({ clientId, newsletterIds: batch.map((row) => row.externalId) }),
+        signal: AbortSignal.timeout(2 * 60_000),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${updated} of ${due.length} email results saved, the rest next night — ${message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}`);
+    }
+    for (const row of batch) {
+      const m = metrics[row.externalId!];
+      if (!m) continue;
+      await prisma.campaignCountry.update({
+        where: { id: row.id },
+        data: { statsSent: m.sentTotal, statsOpens: m.openTotal, statsClicks: m.clickTotal, statsFetchedAt: now },
+      });
+      updated += 1;
+    }
   }
   return updated;
 }

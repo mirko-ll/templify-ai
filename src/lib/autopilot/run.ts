@@ -53,10 +53,23 @@ export async function recentRuns(clientId: string, take = 5) {
 export async function startRun(clientId: string, kind: RunKind): Promise<string | null> {
   const now = new Date();
   await failStaleRuns(clientId, now);
-  const busy = await prisma.autopilotRun.findFirst({ where: { clientId, status: "RUNNING" } });
-  if (busy) return null;
-  const run = await prisma.autopilotRun.create({ data: { clientId, kind, status: "RUNNING" } });
-  return run.id;
+  // Check and create under a row lock on the client's config: the cron fires
+  // twice in production (next.config.ts is loaded twice), and both requests
+  // arrive in the same second.
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM AutopilotConfig WHERE clientId = ${clientId} FOR UPDATE`;
+    const busy = await tx.autopilotRun.findFirst({ where: { clientId, status: "RUNNING" } });
+    if (busy) return null;
+    // The night's run already happened (a duplicate trigger arriving after it finished).
+    if (kind === "NIGHTLY") {
+      const recent = await tx.autopilotRun.findFirst({
+        where: { clientId, kind: "NIGHTLY", startedAt: { gt: new Date(now.getTime() - 6 * 3_600_000) } },
+      });
+      if (recent) return null;
+    }
+    const run = await tx.autopilotRun.create({ data: { clientId, kind, status: "RUNNING" } });
+    return run.id;
+  });
 }
 
 /** Execute a started run to completion (never throws; failures are logged on the run). */
